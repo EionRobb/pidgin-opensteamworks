@@ -3,6 +3,8 @@
 #	define PURPLE_PLUGINS
 #endif
 
+#include "windows.h"
+#include "winbase.h"
 #include "Steamworks.h"
 
 #include <glib.h>
@@ -25,12 +27,14 @@ extern "C" {
 	gint steamworks_send_im(PurpleConnection *pc, const char *who, const char *message, PurpleMessageFlags flags);
 	guint steamworks_send_typing(PurpleConnection *pc, const char *who, PurpleTypingState state);
 	void steamworks_set_status(PurpleAccount *account, PurpleStatus *status);
+	void steamworks_add_buddy(PurpleConnection *, PurpleBuddy *buddy, PurpleGroup *group);
+	void steamworks_remove_buddy(PurpleConnection *, PurpleBuddy *buddy, PurpleGroup *group);
 
 	static PurplePluginProtocolInfo prpl_info = {
 		(PurpleProtocolOptions) (0),// options
 		NULL,                     // user_splits
 		NULL,                     // protocol_options
-		{"jpeg",0,0,64,64,0,PURPLE_ICON_SCALE_DISPLAY},// icon_spec
+		{"png,jpeg",0,0,64,64,0,PURPLE_ICON_SCALE_DISPLAY},// icon_spec
 		steamworks_list_icon,     // list_icon
 		NULL,                     // list_emblem
 		steamworks_status_text,   // status_text
@@ -48,9 +52,9 @@ extern "C" {
 		steamworks_set_status,    // set_status
 		NULL,                     // set_idle
 		NULL,                     // change_passwd
-		NULL,                     // add_buddy
+		steamworks_add_buddy,     // add_buddy
 		NULL,                     // add_buddies
-		NULL,                     // remove_buddy
+		steamworks_remove_buddy,  // remove_buddy
 		NULL,                     // remove_buddies
 		NULL,                     // add_permit
 		NULL,                     // add_deny
