@@ -37,7 +37,7 @@ steamworks_name_to_sid(const gchar *name)
 	accountkey = g_ascii_strtoull(name, NULL, 10);
 	//purple_debug_info("steam", "accountkey %ld\n", accountkey);
 	
-	steamID = CSteamID(accountkey, 1, EUniverse::k_EUniversePublic, EAccountType::k_EAccountTypeIndividual);
+	steamID = CSteamID(accountkey, 1, k_EUniversePublic, k_EAccountTypeIndividual);
 	//purple_debug_info("steam", "steamID %d\n", steamID);
 	
 	return steamID;
@@ -55,6 +55,51 @@ steamworks_sid_to_name(CSteamID steamID)
 	id = g_strdup_printf("%" G_GUINT32_FORMAT, accountkey);
 	
 	return id;
+}
+
+gboolean
+steamworks_load_avatar_for_user(PurpleAccount *account, CSteamID steamID)
+{
+	PurpleConnection *pc = purple_account_get_connection(account);
+	SteamInfo *steam = (SteamInfo *) pc->proto_data;
+	gboolean success = FALSE;
+
+	//Need at least ISteamFriends004 for avatars to work
+	ISteamFriends004 *friends = (ISteamFriends004 *)steam->client->GetISteamFriends(steam->user, steam->pipe, STEAMFRIENDS_INTERFACE_VERSION_004);
+	int avatar_handle = friends->GetFriendAvatar(steamID, 1);
+	gchar *avatar_handle_string = g_strdup_printf("%d", avatar_handle);
+	purple_debug_info("steam", "avatar_handle %d\n", avatar_handle);
+	uint32 avatar_width, avatar_height;
+	if (steam->utils->GetImageSize(avatar_handle, &avatar_width, &avatar_height))
+	{
+		guchar tgaheader[18] = {0,0,2, 0,0,0,0,0, 0,0,0,0,
+			avatar_width&0xFF,(avatar_width&0xFF00)/256,
+			avatar_height&0xFF,(avatar_height&0xFF00)/256,
+			32, 32};
+
+		int buffer_size = (4 * avatar_width * avatar_height);
+		purple_debug_info("steam", "avatar_size %d x %d\n", avatar_width, avatar_height);
+		guchar *image = g_new0(guchar, buffer_size);
+		if (steam->utils->GetImageRGBA(avatar_handle, image, buffer_size))
+		{
+			//add image into pidgin
+			purple_debug_info("steam", "image rgba info!!!!!!\n");
+			guchar temp;
+			for(int i=0; i<buffer_size; i+=4)
+			{
+				temp = image[i+0]; image[i+0] = image[i+2]; image[i+2] = temp;
+			}
+			guchar *tgaimage = g_new0(guchar, buffer_size+18);
+			memcpy(tgaimage, tgaheader, 18);
+			memcpy(&tgaimage[18], image, buffer_size);
+			purple_buddy_icons_set_for_user(account, steamworks_sid_to_name(steamID), tgaimage, buffer_size+18, avatar_handle_string);
+			success = TRUE;
+		} else {
+			purple_debug_info("steam", "no image rgba info :(\n");
+		}
+		g_free(image);
+	}
+	return success;
 }
 
 const gchar *
@@ -113,12 +158,16 @@ steamworks_eventloop(gpointer userdata)
 			steam->friends->GetChatMessage(chatMsg->m_ulSender, chatMsg->m_iChatID, message, 256, &msgType);
 			if (msgType & k_EChatEntryTypeTyping)
 			{
-				serv_got_typing(pc, steamworks_sid_to_name(chatMsg->m_ulSender), 999, PURPLE_TYPING);
+				serv_got_typing(pc, steamworks_sid_to_name(chatMsg->m_ulSender), 20, PURPLE_TYPING);
 			} else if (msgType & k_EChatEntryTypeChatMsg) {
-				serv_got_im(pc, steamworks_sid_to_name(chatMsg->m_ulSender), message, PURPLE_MESSAGE_RECV, time(NULL));
+				gchar *html = purple_strdup_withhtml(message);
+				serv_got_im(pc, steamworks_sid_to_name(chatMsg->m_ulSender), html, PURPLE_MESSAGE_RECV, time(NULL));
+				g_free(html);
 			} else if (msgType & k_EChatEntryTypeEmote) {
 				gchar *emote = g_strconcat("/me ", message, NULL);
-				serv_got_im(pc, steamworks_sid_to_name(chatMsg->m_ulSender), emote, PURPLE_MESSAGE_RECV, time(NULL));
+				gchar *html = purple_strdup_withhtml(emote);
+				serv_got_im(pc, steamworks_sid_to_name(chatMsg->m_ulSender), html, PURPLE_MESSAGE_RECV, time(NULL));
+				g_free(html);
 				g_free(emote);
 			} else if (msgType & k_EChatEntryTypeInviteGame) {
 				purple_debug_warning("steam", "invite to game message\n");
@@ -142,6 +191,10 @@ steamworks_eventloop(gpointer userdata)
 				const gchar *status_id = steamworks_personastate_to_statustype(pstate);
 				purple_prpl_got_user_status(pc->account, steamworks_sid_to_name(state->m_ulSteamID), status_id, NULL);
 			}
+			if (state->m_nChangeFlags & k_EPersonaChangeAvatar)
+			{
+				steamworks_load_avatar_for_user(pc->account, state->m_ulSteamID);
+			}
 			purple_debug_info("steam", "user %d changed state %d\n", state->m_ulSteamID, state->m_nChangeFlags);
 		}	break;
 		case UserRequestingFriendship_t::k_iCallback:
@@ -150,6 +203,9 @@ steamworks_eventloop(gpointer userdata)
 			//requesting friendship
 			UserRequestingFriendship_t *request = (UserRequestingFriendship_t *)CallbackMsg.m_pubParam;
 			purple_debug_info("steam", "user %d requested auth\n", request->k_iCallback);
+			const gchar *username = steamworks_sid_to_name(request->m_ulSteamID);
+			const gchar *alias = steam->friends->GetFriendPersonaName(request->m_ulSteamID);
+			purple_account_request_add(pc->account, username, NULL, alias, NULL);
 		}	break;
 		case FriendAdded_t::k_iCallback:
 		{
@@ -175,7 +231,7 @@ steamworks_eventloop(gpointer userdata)
 		}	break;
 		case LobbyInvite_t::k_iCallback:
 		{
-			purple_debug_info("steam", "Game invite\n");
+			purple_debug_info("steam", "received gameinvite event\n");
 			//steam://joinlobby/630/109775240975659434/76561198011361273
 			//steam://joinlobby/gameid/lobbyid/friendid
 			LobbyInvite_t *invite = (LobbyInvite_t *)CallbackMsg.m_pubParam;
@@ -185,6 +241,8 @@ steamworks_eventloop(gpointer userdata)
 			steam->friends->GetFriendGamePlayed(user, &gameid, NULL, NULL, NULL);
 			gchar *message = g_strdup_printf("/me has invited you to <a href=\"steam://joinlobby/%" G_GUINT64_FORMAT "/%" G_GUINT64_FORMAT "/%" G_GUINT64_FORMAT "\">join their game</a>",
 				gameid, lobby, user);
+			serv_got_im(pc, steamworks_sid_to_name(user), message, (PurpleMessageFlags)(PURPLE_MESSAGE_RECV | PURPLE_MESSAGE_SYSTEM), time(NULL));
+			g_free(message);
 		}	break;
 		default:
 			purple_debug_warning("steam", "unhandled event!\n");
@@ -265,7 +323,7 @@ steamworks_send_typing(PurpleConnection *pc, const char *who, PurpleTypingState 
 	}
 	//purple_debug_info("steam", "sent typing\n");
 	
-	return 999;
+	return 20;
 }
 
 void
@@ -341,8 +399,12 @@ void steamworks_add_buddy(PurpleConnection *pc, PurpleBuddy *buddy, PurpleGroup 
 
 	if (g_ascii_strtoull(buddy->name, NULL, 10))
 	{
+		//Looks like a valid steam uid
+		//Probably from adding buddy when they added us first
 		steam->friends->AddFriend(steamworks_name_to_sid(buddy->name));
 	} else {
+		//Looks like an email address or name
+		//Probably from adding buddy through buddy list
 		steam->friends->AddFriendByName(buddy->name);
 		purple_blist_remove_buddy(buddy);
 	}
@@ -350,7 +412,9 @@ void steamworks_add_buddy(PurpleConnection *pc, PurpleBuddy *buddy, PurpleGroup 
 void steamworks_remove_buddy(PurpleConnection *pc, PurpleBuddy *buddy, PurpleGroup *group)
 {
 	SteamInfo *steam = (SteamInfo *)pc->proto_data;
-	steam->friends->RemoveFriend(steamworks_name_to_sid(buddy->name));
+	
+	if (g_ascii_strtoull(buddy->name, NULL, 10))
+		steam->friends->RemoveFriend(steamworks_name_to_sid(buddy->name));
 }
 
 void
@@ -491,27 +555,8 @@ steamworks_login(PurpleAccount *account)
 		const gchar *status_id = steamworks_personastate_to_statustype(state);
 		purple_debug_info("steam", "status_id %s\n", status_id);
 		purple_prpl_got_user_status(account, id, status_id, NULL);
-
-		//Need at least ISteamFriends004 for avatars to work
-		ISteamFriends004 *friends3 = (ISteamFriends004 *)steam->client->GetISteamFriends(steam->user, steam->pipe, STEAMFRIENDS_INTERFACE_VERSION_004);
-		int avatar_handle = friends3->GetFriendAvatar(steamID, 1);
-		purple_debug_info("steam", "avatar_handle %d\n", avatar_handle);
-		uint32 avatar_width, avatar_height;
-		if (steam->utils->GetImageSize(avatar_handle, &avatar_width, &avatar_height))
-		{
-			int buffer_size = (4 * avatar_width * avatar_height);
-			purple_debug_info("steam", "avatar_size %d x %d\n", avatar_width, avatar_height);
-			guchar *image = g_new0(guchar, buffer_size);
-			if (steam->utils->GetImageRGBA(avatar_handle, image, buffer_size))
-			{
-				//add image into pidgin
-				purple_debug_info("steam", "image rgba info!!!!!!\n");
-				purple_buddy_icons_set_for_user(account, id, image, buffer_size, NULL);
-			} else {
-				g_free(image);
-				purple_debug_info("steam", "no image rgba info :(\n");
-			}
-		}
+		
+		steamworks_load_avatar_for_user(account, steamID);
 	}
 
 	//Finally, start the event loop
