@@ -96,7 +96,13 @@ extern "C" {
 		NULL,                     // unregister_user
 		NULL,                     // send_attention
 		NULL,                     // get_attention_types
-		sizeof(PurplePluginProtocolInfo) // struct_size
+		sizeof(PurplePluginProtocolInfo), // struct_size
+		NULL,                     // account_text_table
+		NULL,                     // initiate_media
+		NULL,                     // media_caps
+		NULL,                     // get_moods
+		NULL,                     // set_public_alias
+		NULL                      // get_public_alias
 	};
 
 	static gboolean
