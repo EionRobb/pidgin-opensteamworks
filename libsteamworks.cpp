@@ -34,7 +34,7 @@ steamworks_name_to_sid(const gchar *name)
 	guint32 accountkey;
 	static CSteamID steamID;
 	
-	accountkey = g_ascii_strtoull(name, NULL, 10);
+	accountkey = atol(name);
 	//purple_debug_info("steam", "accountkey %ld\n", accountkey);
 	
 	steamID = CSteamID(accountkey, 1, k_EUniversePublic, k_EAccountTypeIndividual);
@@ -63,15 +63,15 @@ steamworks_load_avatar_for_user(PurpleAccount *account, CSteamID steamID)
 	PurpleConnection *pc = purple_account_get_connection(account);
 	SteamInfo *steam = (SteamInfo *) pc->proto_data;
 	gboolean success = FALSE;
+	uint32 avatar_width, avatar_height;
 
 	//Need at least ISteamFriends004 for avatars to work
 	ISteamFriends004 *friends = (ISteamFriends004 *)steam->client->GetISteamFriends(steam->user, steam->pipe, STEAMFRIENDS_INTERFACE_VERSION_004);
 	int avatar_handle = friends->GetFriendAvatar(steamID, 1);
-	gchar *avatar_handle_string = g_strdup_printf("%d", avatar_handle);
-	purple_debug_info("steam", "avatar_handle %d\n", avatar_handle);
-	uint32 avatar_width, avatar_height;
+
 	if (steam->utils->GetImageSize(avatar_handle, &avatar_width, &avatar_height))
 	{
+		//Set a TGA file header for a 32bpp BGRA image
 		guchar tgaheader[18] = {0,0,2, 0,0,0,0,0, 0,0,0,0,
 			avatar_width&0xFF,(avatar_width&0xFF00)/256,
 			avatar_height&0xFF,(avatar_height&0xFF00)/256,
@@ -82,20 +82,18 @@ steamworks_load_avatar_for_user(PurpleAccount *account, CSteamID steamID)
 		guchar *image = g_new0(guchar, buffer_size);
 		if (steam->utils->GetImageRGBA(avatar_handle, image, buffer_size))
 		{
-			//add image into pidgin
-			purple_debug_info("steam", "image rgba info!!!!!!\n");
+			//User has image, add into Pidgin
 			guchar temp;
 			for(int i=0; i<buffer_size; i+=4)
 			{
+				// Swap RGBA -> BGRA
 				temp = image[i+0]; image[i+0] = image[i+2]; image[i+2] = temp;
 			}
 			guchar *tgaimage = g_new0(guchar, buffer_size+18);
 			memcpy(tgaimage, tgaheader, 18);
 			memcpy(&tgaimage[18], image, buffer_size);
-			purple_buddy_icons_set_for_user(account, steamworks_sid_to_name(steamID), tgaimage, buffer_size+18, avatar_handle_string);
+			purple_buddy_icons_set_for_user(account, steamworks_sid_to_name(steamID), tgaimage, buffer_size+18, NULL);
 			success = TRUE;
-		} else {
-			purple_debug_info("steam", "no image rgba info :(\n");
 		}
 		g_free(image);
 	}
@@ -128,6 +126,84 @@ steamworks_personastate_to_statustype(const EPersonaState state)
 	}
 	status_id = purple_primitive_get_id_from_type(prim);
 	return status_id;
+}
+
+#ifndef memmem
+#ifndef _LIBC
+# define __builtin_expect(expr, val)   (expr)
+#endif
+/* Return the first occurrence of NEEDLE in HAYSTACK.  */
+void *
+memmem (const void *haystack, size_t haystack_len, const void *needle, size_t needle_len)
+{
+  const char *begin;
+  const char *const last_possible
+    = (const char *) haystack + haystack_len - needle_len;
+
+  if (needle_len == 0)
+    /* The first occurrence of the empty string is deemed to occur at
+       the beginning of the string.  */
+    return (void *) haystack;
+
+  /* Sanity check, otherwise the loop might search through the whole
+     memory.  */
+  if (__builtin_expect (haystack_len < needle_len, 0))
+    return NULL;
+
+  for (begin = (const char *) haystack; begin <= last_possible; ++begin)
+    if (begin[0] == ((const char *) needle)[0] &&
+	!memcmp ((const void *) &begin[1],
+		 (const void *) ((const char *) needle + 1),
+		 needle_len - 1))
+      return (void *) begin;
+
+  return NULL;
+}
+#endif
+
+gchar *
+steamworks_gameid_to_gamename(SteamInfo *steam, guint64 gameid)
+{
+	gchar *name = NULL;
+	static gchar *appinfo = NULL;
+	gchar *appinfo_filename;
+	gsize appinfo_len;
+	gboolean success;
+	
+	if (!appinfo)
+	{
+		// steamdir/appcache/appinfo.vdf
+		appinfo_filename = g_strconcat(steam->loader->GetSteamDir().c_str(),
+			G_DIR_SEPARATOR_S "appcache" G_DIR_SEPARATOR_S "appinfo.vdf", NULL);
+		success = g_file_get_contents(appinfo_filename, &appinfo, &appinfo_len, NULL);
+		purple_debug_info("steam", "Opened %s? %d!\n", appinfo_filename, success);
+		g_free(appinfo_filename);
+		if (!success)
+			return NULL;
+	}
+
+	// Find:
+	// \1gameid\0(id)\0
+	gchar *gameid_str = g_strdup_printf("%" G_GUINT64_FORMAT, gameid);
+	gchar *gameid_search = g_strdup_printf("\1gameid\0%s\0", gameid_str);
+	gchar *search_temp = (gchar *)memmem(appinfo, appinfo_len, gameid_search, strlen(gameid_str)+9);
+	g_free(gameid_search);
+	g_free(gameid_str);
+
+	if (search_temp)
+	{
+		purple_debug_info("steam", "Found %s\n", search_temp);
+		// Go to the start of the line
+		search_temp = strrchr(search_temp, '\n');
+		if (!search_temp) search_temp = appinfo;
+
+		// Find \1name\0(gamename)\0
+		search_temp = strstr(search_temp, "\1name\0");
+		if (search_temp)
+			name = g_strdup(&search_temp[6]);
+	}
+
+	return name;
 }
 
 gboolean
@@ -257,7 +333,7 @@ steamworks_eventloop(gpointer userdata)
 gchar *
 steamworks_status_text(PurpleBuddy *buddy)
 {
-	purple_debug_info("steam", "status_text\n");
+	//purple_debug_info("steam", "status_text\n");
 	PurpleConnection *pc = purple_account_get_connection(buddy->account);
 	SteamInfo *steam = (SteamInfo *)pc->proto_data;
 	CSteamID steamID = steamworks_name_to_sid(buddy->name);
@@ -271,11 +347,18 @@ steamworks_status_text(PurpleBuddy *buddy)
 	gchar *appname = NULL;
 	if (steam->friends->GetFriendGamePlayed( steamID, &gameid, NULL, NULL, NULL ))
 	{
+		gchar *tempname;
 		/*TSteamApp app;
 		TSteamError error;
 		SteamEnumApp(gameid, &app, &error);
-		appname = g_strdup(app.szName);*/
-		appname = g_strdup_printf("In-game %" G_GUINT32_FORMAT "\n", gameid);
+		tempname = g_strdup(app.szName);*/
+		tempname = steamworks_gameid_to_gamename(steam, gameid);
+		if (tempname == NULL)
+		{
+			tempname = g_strdup_printf("%" G_GUINT64_FORMAT, gameid);
+		}
+		appname = g_strdup_printf("In game %s", tempname);
+		g_free(tempname);
 	}
 	
 	return appname;
@@ -375,16 +458,13 @@ steamworks_send_im(PurpleConnection *pc, const char *who, const char *message, P
 	purple_debug_info("steam", "send_im\n");
 	stripped = purple_markup_strip_html(message);
 	
-	if (message[0] == '/' &&
-		message[1] == 'm' &&
-		message[2] == 'e' &&
-		message[3] == ' ')
+	if (purple_message_meify(stripped, -1))
 	{
 		purple_debug_info("steam", "sending emote...\n");
-		success = steam->friends->SendMsgToFriend(steamID, k_EChatEntryTypeEmote, &stripped[4], strlen(stripped)-3);
+		success = steam->friends->SendMsgToFriend(steamID, k_EChatEntryTypeEmote, stripped, (int)strlen(stripped)-3);
 	} else {
 		purple_debug_info("steam", "sending message...\n");
-		success = steam->friends->SendMsgToFriend(steamID, k_EChatEntryTypeChatMsg, stripped, strlen(stripped)+1);
+		success = steam->friends->SendMsgToFriend(steamID, k_EChatEntryTypeChatMsg, stripped, (int)strlen(stripped)+1);
 	}
 	purple_debug_info("steam", "sent.\n");
 	
