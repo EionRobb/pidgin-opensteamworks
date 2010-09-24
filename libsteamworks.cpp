@@ -165,18 +165,19 @@ gchar *
 steamworks_gameid_to_gamename(SteamInfo *steam, guint64 gameid)
 {
 	gchar *name = NULL;
+	static gsize appinfo_len = 0;
 	static gchar *appinfo = NULL;
 	gchar *appinfo_filename;
-	gsize appinfo_len;
 	gboolean success;
 	
+	purple_debug_info("steam", "Finding game name for %" G_GUINT64_FORMAT "\n", gameid);
 	if (!appinfo)
 	{
+		purple_debug_info("steam", "One-off loading appinfo.vdf\n");
 		// steamdir/appcache/appinfo.vdf
 		appinfo_filename = g_strconcat(steam->loader->GetSteamDir().c_str(),
 			G_DIR_SEPARATOR_S "appcache" G_DIR_SEPARATOR_S "appinfo.vdf", NULL);
 		success = g_file_get_contents(appinfo_filename, &appinfo, &appinfo_len, NULL);
-		purple_debug_info("steam", "Opened %s? %d!\n", appinfo_filename, success);
 		g_free(appinfo_filename);
 		if (!success)
 			return NULL;
@@ -185,22 +186,24 @@ steamworks_gameid_to_gamename(SteamInfo *steam, guint64 gameid)
 	// Find:
 	// \1gameid\0(id)\0
 	gchar *gameid_str = g_strdup_printf("%" G_GUINT64_FORMAT, gameid);
-	gchar *gameid_search = g_strdup_printf("\1gameid\0%s\0", gameid_str);
+	gchar *gameid_search = g_strdup_printf("\1gameid\1%s\0", gameid_str);
+	gameid_search[7] = '\0';
 	gchar *search_temp = (gchar *)memmem(appinfo, appinfo_len, gameid_search, strlen(gameid_str)+9);
 	g_free(gameid_search);
 	g_free(gameid_str);
 
 	if (search_temp)
 	{
-		purple_debug_info("steam", "Found %s\n", search_temp);
 		// Go to the start of the line
-		search_temp = strrchr(search_temp, '\n');
-		if (!search_temp) search_temp = appinfo;
+		while(search_temp != appinfo && *search_temp != '\n')
+			search_temp--;
 
 		// Find \1name\0(gamename)\0
-		search_temp = strstr(search_temp, "\1name\0");
+		search_temp = (gchar *)memmem(search_temp, appinfo_len-(search_temp-appinfo), "\1name\0", 6);
 		if (search_temp)
+		{
 			name = g_strdup(&search_temp[6]);
+		}
 	}
 
 	return name;
@@ -213,7 +216,8 @@ steamworks_eventloop(gpointer userdata)
 	SteamInfo *steam = (SteamInfo *) pc->proto_data;
 	CallbackMsg_t CallbackMsg;
 
-	if (BGetCallback(steam->pipe, &CallbackMsg))
+	// Download all waiting events
+	while (BGetCallback(steam->pipe, &CallbackMsg))
 	{
 		purple_debug_info("steam", "Recieved event type %d\n", CallbackMsg.m_iCallback);
 		switch(CallbackMsg.m_iCallback)
@@ -399,9 +403,9 @@ steamworks_send_typing(PurpleConnection *pc, const char *who, PurpleTypingState 
 	SteamInfo *steam = (SteamInfo *)pc->proto_data;
 	CSteamID steamID = steamworks_name_to_sid(who);
 	
-	purple_debug_info("steam", "send_typing\n");
 	if (state == PURPLE_TYPING)
 	{
+		purple_debug_info("steam", "send_typing\n");
 		steam->friends->SendMsgToFriend(steamID, k_EChatEntryTypeTyping, "", 0);
 	}
 	//purple_debug_info("steam", "sent typing\n");
