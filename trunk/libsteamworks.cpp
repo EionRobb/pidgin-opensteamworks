@@ -1,3 +1,5 @@
+#define STEAMWORKS_CLIENT_INTERFACES
+
 #include "libsteamworks.h"
 
 //#pragma comment(lib, "opensteamworks/steamclient")
@@ -23,24 +25,18 @@ typedef struct {
 	ISteamFriends002 *friends;
 	ISteamUtils002 *utils;
 	ISteamUser005 *suser;
+	IClientFriends *clientfriends;
+	ISteamApps001 *apps;
 
 	guint event_timer;
 } SteamInfo;
 
 const CSteamID 
 steamworks_name_to_sid(const gchar *name)
-{
-	//purple_debug_info("steam", "name_to_sid %s\n", name);
-	guint32 accountkey;
-	static CSteamID steamID;
+{	
+	guint32 accountkey = atol(name);
 	
-	accountkey = atol(name);
-	//purple_debug_info("steam", "accountkey %ld\n", accountkey);
-	
-	steamID = CSteamID(accountkey, 1, k_EUniversePublic, k_EAccountTypeIndividual);
-	//purple_debug_info("steam", "steamID %d\n", steamID);
-	
-	return steamID;
+	return CSteamID(accountkey, 1, k_EUniversePublic, k_EAccountTypeIndividual);
 }
 
 const gchar *
@@ -65,9 +61,16 @@ steamworks_load_avatar_for_user(PurpleAccount *account, CSteamID steamID)
 	gboolean success = FALSE;
 	uint32 avatar_width, avatar_height;
 
-	//Need at least ISteamFriends004 for avatars to work
-	ISteamFriends004 *friends = (ISteamFriends004 *)steam->client->GetISteamFriends(steam->user, steam->pipe, STEAMFRIENDS_INTERFACE_VERSION_004);
-	int avatar_handle = friends->GetFriendAvatar(steamID, 1);
+	int avatar_handle;
+	
+	if (steam->clientfriends)
+		avatar_handle = steam->clientfriends->GetLargeFriendAvatar(steamID);
+	else
+	{
+		//Need at least ISteamFriends004 for avatars to work
+		ISteamFriends004 *friends = (ISteamFriends004 *)steam->client->GetISteamFriends(steam->user, steam->pipe, STEAMFRIENDS_INTERFACE_VERSION_004);
+		avatar_handle = friends->GetFriendAvatar(steamID, 1);
+	}
 
 	if (steam->utils->GetImageSize(avatar_handle, &avatar_width, &avatar_height))
 	{
@@ -97,6 +100,7 @@ steamworks_load_avatar_for_user(PurpleAccount *account, CSteamID steamID)
 		}
 		g_free(image);
 	}
+
 	return success;
 }
 
@@ -171,6 +175,15 @@ steamworks_gameid_to_gamename(SteamInfo *steam, guint64 gameid)
 	gboolean success;
 	
 	purple_debug_info("steam", "Finding game name for %" G_GUINT64_FORMAT "\n", gameid);
+
+	if (steam->apps)
+	{
+		name = g_new0(gchar, 256);
+		if (steam->apps->GetAppData(gameid, "name", name, 256))
+			return name;
+		g_free(name);
+	}
+
 	if (!appinfo)
 	{
 		purple_debug_info("steam", "One-off loading appinfo.vdf\n");
@@ -195,7 +208,7 @@ steamworks_gameid_to_gamename(SteamInfo *steam, guint64 gameid)
 	if (search_temp)
 	{
 		// Go to the start of the line
-		while(search_temp != appinfo && *search_temp != '\n')
+		while(search_temp != appinfo && *search_temp != '\2')
 			search_temp--;
 
 		// Find \1name\0(gamename)\0
@@ -324,6 +337,53 @@ steamworks_eventloop(gpointer userdata)
 			serv_got_im(pc, steamworks_sid_to_name(user), message, (PurpleMessageFlags)(PURPLE_MESSAGE_RECV | PURPLE_MESSAGE_SYSTEM), time(NULL));
 			g_free(message);
 		}	break;
+		case ChatRoomInvite_t::k_iCallback:
+		{
+			purple_debug_info("steam", "received chatroominvite event\n");
+			// invited to chat room
+			ChatRoomInvite_t *invite = (ChatRoomInvite_t *)CallbackMsg.m_pubParam;
+			gchar *chatid = g_strdup(steamworks_sid_to_name(invite->m_ulSteamIDChat));
+			gchar *friendid = g_strdup(steamworks_sid_to_name(invite->m_ulSteamIDFriendChat));
+			serv_got_chat_invite(pc, chatid, friendid, NULL, steamworks_chat_defaults(pc, chatid));
+			g_free(chatid);
+			g_free(friendid);
+		}	break;
+		case ChatRoomMsg_t::k_iCallback:
+		{
+			purple_debug_info("steam", "received chatroommsg event\n");
+			// chat room message
+			ChatRoomMsg_t *msg = (ChatRoomMsg_t *)CallbackMsg.m_pubParam;
+			EChatEntryType msgType;
+			CSteamID steamUser;
+
+			if (!steam->clientfriends)
+				break;
+
+			gchar *message = g_new0(gchar, 256);
+
+			if (gint msgLen = steam->clientfriends->GetChatRoomEntry(msg->m_ulSteamIDChat, msg->m_iChatID, &steamUser, message, 256, &msgType) > 256)
+			{
+				g_free(message);
+				message = g_new0(gchar, msgLen + 1);
+				steam->clientfriends->GetChatRoomEntry(msg->m_ulSteamIDChat, msg->m_iChatID, &steamUser, message, msgLen, &msgType);
+			}
+			
+			gint chatid = msg->m_ulSteamIDChat.GetAccountID();
+			gchar *friendid = g_strdup(steamworks_sid_to_name(steamUser));
+			if (msg->m_eChatEntryType & k_EChatEntryTypeChatMsg) {
+				gchar *html = purple_strdup_withhtml(message);
+				serv_got_chat_in(pc, chatid, friendid, PURPLE_MESSAGE_RECV, html, time(NULL));
+				g_free(html);
+			} else if (msg->m_eChatEntryType & k_EChatEntryTypeEmote) {
+				gchar *emote = g_strconcat("/me ", message, NULL);
+				gchar *html = purple_strdup_withhtml(emote);
+				serv_got_chat_in(pc, chatid, friendid, PURPLE_MESSAGE_RECV, html, time(NULL));
+				g_free(html);
+				g_free(emote);
+			}
+			g_free(friendid);
+			g_free(message);
+		}	break;
 		default:
 			purple_debug_warning("steam", "unhandled event!\n");
 			break;
@@ -352,10 +412,6 @@ steamworks_status_text(PurpleBuddy *buddy)
 	if (steam->friends->GetFriendGamePlayed( steamID, &gameid, NULL, NULL, NULL ))
 	{
 		gchar *tempname;
-		/*TSteamApp app;
-		TSteamError error;
-		SteamEnumApp(gameid, &app, &error);
-		tempname = g_strdup(app.szName);*/
 		tempname = steamworks_gameid_to_gamename(steam, gameid);
 		if (tempname == NULL)
 		{
@@ -493,6 +549,7 @@ void steamworks_add_buddy(PurpleConnection *pc, PurpleBuddy *buddy, PurpleGroup 
 		purple_blist_remove_buddy(buddy);
 	}
 }
+
 void steamworks_remove_buddy(PurpleConnection *pc, PurpleBuddy *buddy, PurpleGroup *group)
 {
 	SteamInfo *steam = (SteamInfo *)pc->proto_data;
@@ -502,16 +559,217 @@ void steamworks_remove_buddy(PurpleConnection *pc, PurpleBuddy *buddy, PurpleGro
 }
 
 void
+steamworks_alias_buddy(PurpleConnection *pc, const char *who, const char *alias)
+{
+	SteamInfo *steam = (SteamInfo *)pc->proto_data;
+	if (steam && steam->clientfriends)
+	{
+		if (!alias)
+			alias = "";
+		steam->clientfriends->SetFriendAlias(steamworks_name_to_sid(who), alias);
+	}
+}
+
+void
+steamworks_ignore_buddy(PurpleConnection *pc, const char *name)
+{
+	SteamInfo *steam = (SteamInfo *)pc->proto_data;
+	if (steam && steam->clientfriends)
+	{
+		steam->clientfriends->SetIgnoreFriend(steamworks_name_to_sid(name), TRUE);
+	}
+}
+
+void
+steamworks_unignore_buddy(PurpleConnection *pc, const char *name)
+{
+	SteamInfo *steam = (SteamInfo *)pc->proto_data;
+	if (steam && steam->clientfriends)
+	{
+		steam->clientfriends->SetIgnoreFriend(steamworks_name_to_sid(name), FALSE);
+	}
+}
+
+const CSteamID
+steamworks_chatid_to_sid(int chatid)
+{
+	return CSteamID(chatid, 1, k_EUniversePublic, k_EAccountTypeChat);
+}
+
+const CSteamID
+steamworks_chatname_to_sid(const gchar *chatname)
+{
+	guint32 accountkey;
+	accountkey = atol(chatname);
+	return steamworks_chatid_to_sid(accountkey);
+}
+
+int
+steamworks_chat_send(PurpleConnection *pc, int id, const char *message, PurpleMessageFlags flags)
+{
+	SteamInfo *steam = (SteamInfo *)pc->proto_data;
+	gchar *stripped;
+	gboolean success;
+	CSteamID steamID = steamworks_chatid_to_sid(id);
+	
+	if (steam && steam->clientfriends)
+	{
+		purple_debug_info("steam", "chat_send\n");
+		stripped = purple_markup_strip_html(message);
+		
+		if (purple_message_meify(stripped, -1))
+		{
+			purple_debug_info("steam", "sending emote...\n");
+			success = steam->clientfriends->SendChatMsg(steamID, k_EChatEntryTypeEmote, stripped, (int)strlen(stripped)-3);
+		} else {
+			purple_debug_info("steam", "sending message...\n");
+			success = steam->clientfriends->SendChatMsg(steamID, k_EChatEntryTypeChatMsg, stripped, (int)strlen(stripped)+1);
+		}
+
+		g_free(stripped);
+
+		return 1;
+	}
+
+	return -57;
+}
+
+GList *
+steamworks_chat_info(PurpleConnection *pc)
+{
+	GList *m = NULL;
+	struct proto_chat_entry *pce;
+
+	pce = g_new0(struct proto_chat_entry, 1);
+	pce->label = "SteamID";
+	pce->identifier = "steamID";
+	pce->required = TRUE;
+	m = g_list_append(m, pce);
+
+	return m;
+}
+
+GHashTable *
+steamworks_chat_defaults(PurpleConnection *pc, const char *chat_name)
+{
+	GHashTable *defaults;
+
+	defaults = g_hash_table_new_full(g_str_hash, g_str_equal, NULL, g_free);
+
+	if (chat_name && *chat_name)
+	{
+		g_hash_table_insert(defaults, "steamID", g_strdup(chat_name));
+	}
+
+	return defaults;
+}
+
+void
+steamworks_reject_chat(PurpleConnection *pc, GHashTable *components)
+{
+	SteamInfo *steam = (SteamInfo *)pc->proto_data;
+
+	if (steam && steam->clientfriends && components)
+	{
+		CSteamID chatId = steamworks_chatname_to_sid((const gchar *)g_hash_table_lookup(components, "steamID"));
+		
+		steam->clientfriends->ReportChatDeclined(chatId);
+	}
+}
+
+gchar *
+steamworks_get_chat_name(GHashTable *components)
+{
+	return g_strdup((const gchar *)g_hash_table_lookup(components, "steamID"));
+}
+
+void
+steamworks_chat_invite(PurpleConnection *pc, int id, const char *message, const char *who)
+{
+	SteamInfo *steam = (SteamInfo *)pc->proto_data;
+
+	if (steam && steam->clientfriends)
+	{
+		CSteamID chatId = steamworks_chatid_to_sid(id);
+		CSteamID friendId = steamworks_name_to_sid(who);
+
+		steam->clientfriends->InviteUserToChatRoom(friendId, chatId);
+	}
+}
+
+void
+steamworks_chat_leave(PurpleConnection *pc, int id)
+{
+	SteamInfo *steam = (SteamInfo *)pc->proto_data;
+
+	if (steam && steam->clientfriends)
+	{
+		CSteamID chatId = steamworks_chatid_to_sid(id);
+
+		steam->clientfriends->LeaveChatRoom(chatId);
+	}
+}
+
+void
+steamworks_join_chat(PurpleConnection *pc, GHashTable *components)
+{
+	SteamInfo *steam = (SteamInfo *)pc->proto_data;
+
+	if (steam && steam->clientfriends && components)
+	{
+		CSteamID chatId = steamworks_chatname_to_sid((const gchar *)g_hash_table_lookup(components, "steamID"));
+		
+		steam->clientfriends->JoinChatRoom(chatId);
+	}
+}
+
+void
+steamworks_tooltip_text(PurpleBuddy *buddy, PurpleNotifyUserInfo *user_info, gboolean full)
+{
+	PurpleConnection *pc = purple_account_get_connection(buddy->account);
+	SteamInfo *steam = (SteamInfo *)pc->proto_data;
+	CSteamID steamID = steamworks_name_to_sid(buddy->name);
+
+	if (steam && steam->friends)
+	{
+		const gchar *name = steam->friends->GetFriendPersonaName(steamID);
+		if (*name)
+			purple_notify_user_info_add_pair(user_info, "Name", name);
+	}
+
+	PurplePresence *presence = purple_buddy_get_presence(buddy);
+	PurpleStatus *status = purple_presence_get_active_status(presence);
+	purple_notify_user_info_add_pair(user_info, "Status", purple_status_get_name(status));
+	
+	if (steam && steam->friends)
+	{
+		FriendGameInfo_t friendinfo;
+		guint64 gameid;
+		if (steam->friends->GetFriendGamePlayed( steamID, &gameid, NULL, NULL, NULL ))
+		{
+			gchar *gamename = NULL;
+			gamename = steamworks_gameid_to_gamename(steam, gameid);
+			purple_notify_user_info_add_pair(user_info, "In game", gamename);
+			g_free(gamename);
+		}
+	}
+}
+
+
+void
 steamworks_close(PurpleConnection *pc)
 {
 	SteamInfo *steam = (SteamInfo *)pc->proto_data;
 	
 	purple_debug_info("steam", "close\n");
 
-	purple_timeout_remove(steam->event_timer);
-
 	if (!steam)
 		return;
+
+	purple_timeout_remove(steam->event_timer);
+
+	if (steam->friends)
+		steam->friends->SetPersonaState(k_EPersonaStateOffline);
 	
 	//if (steam->client && steam->pipe)
 	//{
@@ -527,6 +785,8 @@ steamworks_close(PurpleConnection *pc)
 	steam->pipe = NULL;
 	steam->suser = NULL;
 	steam->utils = NULL;
+	steam->clientfriends = NULL;
+	steam->apps = NULL;
 	
 	g_free(steam);
 
@@ -594,6 +854,12 @@ steamworks_login(PurpleAccount *account)
 		purple_connection_error(pc, "Could not load utils\n");
 		return;
 	}
+	steam->apps = (ISteamApps001 *)steam->client->GetISteamApps(steam->user, steam->pipe, STEAMAPPS_INTERFACE_VERSION_001);
+
+	IClientEngine *clientEngine = (IClientEngine *)steam->factory( CLIENTENGINE_INTERFACE_VERSION, NULL );
+	if (clientEngine)
+		steam->clientfriends = clientEngine->GetIClientFriends( steam->user, steam->pipe, CLIENTFRIENDS_INTERFACE_VERSION );
+
 	purple_connection_set_state(pc, PURPLE_CONNECTED);
 	steamworks_set_status(account, purple_account_get_active_status(account));
 
@@ -603,7 +869,10 @@ steamworks_login(PurpleAccount *account)
 	if (steam->suser)
 	{
 		if (!steam->suser->LoggedOn())
+		{
+			purple_debug_info("steam", "Not logged in.  Logging in...\n");
 			steam->suser->LogOn(steam->suser->GetSteamID());
+		}
 		steam->suser->SetSelfAsPrimaryChatDestination();
 	}
 

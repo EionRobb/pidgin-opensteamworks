@@ -29,20 +29,32 @@ extern "C" {
 	void steamworks_set_status(PurpleAccount *account, PurpleStatus *status);
 	void steamworks_add_buddy(PurpleConnection *, PurpleBuddy *buddy, PurpleGroup *group);
 	void steamworks_remove_buddy(PurpleConnection *, PurpleBuddy *buddy, PurpleGroup *group);
+	void steamworks_alias_buddy(PurpleConnection *, const char *who, const char *alias);
+	void steamworks_ignore_buddy(PurpleConnection *, const char *name);
+	void steamworks_unignore_buddy(PurpleConnection *, const char *name);
+	int steamworks_chat_send(PurpleConnection *, int id, const char *message, PurpleMessageFlags flags);
+	GList *steamworks_chat_info(PurpleConnection *);
+	GHashTable *steamworks_chat_defaults(PurpleConnection *, const char *chat_name);
+	void steamworks_reject_chat(PurpleConnection *, GHashTable *components);
+	gchar *steamworks_get_chat_name(GHashTable *components);
+	void steamworks_chat_invite(PurpleConnection *, int id, const char *message, const char *who);
+	void steamworks_chat_leave(PurpleConnection *, int id);
+	void steamworks_join_chat(PurpleConnection *, GHashTable *components);
+	void steamworks_tooltip_text(PurpleBuddy *buddy, PurpleNotifyUserInfo *user_info, gboolean full);
 
 	static PurplePluginProtocolInfo prpl_info = {
-		(PurpleProtocolOptions) (0),// options
+		(PurpleProtocolOptions) (OPT_PROTO_CHAT_TOPIC),// options
 		NULL,                     // user_splits
 		NULL,                     // protocol_options
 		{"png,jpeg",0,0,64,64,0,PURPLE_ICON_SCALE_DISPLAY},// icon_spec
 		steamworks_list_icon,     // list_icon
 		NULL,                     // list_emblem
 		steamworks_status_text,   // status_text
-		NULL,                     // tooltip_text
+		steamworks_tooltip_text,  // tooltip_text
 		steamworks_status_types,  // status_types
 		NULL,                     // blist_node_menu
-		NULL,                     // chat_info
-		NULL,                     // chat_info_defaults
+		steamworks_chat_info,     // chat_info
+		steamworks_chat_defaults, // chat_info_defaults
 		steamworks_login,         // login
 		steamworks_close,         // close
 		steamworks_send_im,       // send_im
@@ -57,22 +69,22 @@ extern "C" {
 		steamworks_remove_buddy,  // remove_buddy
 		NULL,                     // remove_buddies
 		NULL,                     // add_permit
-		NULL,                     // add_deny
+		steamworks_ignore_buddy,  // add_deny
 		NULL,                     // rem_permit
-		NULL,                     // rem_deny
+		steamworks_unignore_buddy,// rem_deny
 		NULL,                     // set_permit_deny
-		NULL,                     // join_chat
-		NULL,                     // reject_chat
-		NULL,                     // get_chat_name
-		NULL,                     // chat_invite
-		NULL,                     // chat_leave
+		steamworks_join_chat,     // join_chat
+		steamworks_reject_chat,   // reject_chat
+		steamworks_get_chat_name, // get_chat_name
+		steamworks_chat_invite,   // chat_invite
+		steamworks_chat_leave,    // chat_leave
 		NULL,                     // chat_whisper
-		NULL,                     // chat_send
+		steamworks_chat_send,     // chat_send
 		NULL,                     // keepalive
 		NULL,                     // register_user
 		NULL,                     // get_cb_info
 		NULL,                     // get_cb_away
-		NULL,                     // alias_buddy
+		steamworks_alias_buddy,   // alias_buddy
 		NULL,                     // group_buddy
 		NULL,                     // rename_group
 		NULL,                     // buddy_free
