@@ -31,11 +31,33 @@ typedef struct {
 	guint event_timer;
 } SteamInfo;
 
+/*const CSteamID 
+steamworks_name_to_sid(const gchar *name)
+{
+	static CSteamID *sid;
+	guint64 accountkey = g_ascii_strtoull(name, NULL, 10);
+	
+	sid = new CSteamID(accountkey);
+	
+	return *sid;
+}
+
+const gchar *
+steamworks_sid_to_name(CSteamID steamID)
+{
+	static gchar *id = NULL;
+
+	g_free(id);
+	id = g_strdup_printf("%" G_GUINT64_FORMAT, steamID.ConvertToUint64());
+	
+	return id;
+}*/
+
 const CSteamID 
 steamworks_name_to_sid(const gchar *name)
-{	
+{       
 	guint32 accountkey = atol(name);
-	
+
 	return CSteamID(accountkey, 1, k_EUniversePublic, k_EAccountTypeIndividual);
 }
 
@@ -45,12 +67,23 @@ steamworks_sid_to_name(CSteamID steamID)
 	//purple_debug_info("steam", "sid_to_name\n");
 	guint32 accountkey;
 	static gchar *id = NULL;
-
+	
 	g_free(id);
 	accountkey = steamID.GetAccountID();
 	id = g_strdup_printf("%" G_GUINT32_FORMAT, accountkey);
 	
 	return id;
+}
+
+const guint64
+steamworks_get_friend_gameid(SteamInfo *steam, CSteamID user)
+{
+	FriendGameInfo_t gameinfo;
+	
+	if (steam && steam->clientfriends && steam->clientfriends->GetFriendGamePlayed(user, &gameinfo))
+		return gameinfo.m_gameID.ToUint64();
+	
+	return 0;
 }
 
 gboolean
@@ -68,8 +101,9 @@ steamworks_load_avatar_for_user(PurpleAccount *account, CSteamID steamID)
 	else
 	{
 		//Need at least ISteamFriends004 for avatars to work
-		ISteamFriends004 *friends = (ISteamFriends004 *)steam->client->GetISteamFriends(steam->user, steam->pipe, STEAMFRIENDS_INTERFACE_VERSION_004);
-		avatar_handle = friends->GetFriendAvatar(steamID, 1);
+		ISteamFriends007 *friends = (ISteamFriends007 *)steam->client->GetISteamFriends(steam->user, steam->pipe, STEAMFRIENDS_INTERFACE_VERSION_007);
+		//avatar_handle = friends->GetFriendAvatar(steamID, 1);
+		avatar_handle = friends->GetLargeFriendAvatar(steamID);
 	}
 
 	if (steam->utils->GetImageSize(avatar_handle, &avatar_width, &avatar_height))
@@ -179,7 +213,7 @@ steamworks_gameid_to_gamename(SteamInfo *steam, guint64 gameid)
 	if (steam->apps)
 	{
 		name = g_new0(gchar, 256);
-		if (steam->apps->GetAppData(gameid, "name", name, 256))
+		if (steam->apps->GetAppData((AppId_t) gameid, "name", name, 256))
 			return name;
 		g_free(name);
 	}
@@ -248,7 +282,13 @@ steamworks_eventloop(gpointer userdata)
 			EChatEntryType msgType;
 			gchar *message = g_new0(gchar, 256);
 
-			steam->friends->GetChatMessage(chatMsg->m_ulSender, chatMsg->m_iChatID, message, 256, &msgType);
+			if (gint msgLen = steam->friends->GetChatMessage(chatMsg->m_ulSender, chatMsg->m_iChatID, message, 256, &msgType) > 256 )
+			{
+				g_free(message);
+				message = g_new0(gchar, msgLen + 1);
+				steam->friends->GetChatMessage(chatMsg->m_ulSender, chatMsg->m_iChatID, message, msgLen, &msgType);
+			}
+
 			if (msgType & k_EChatEntryTypeTyping)
 			{
 				serv_got_typing(pc, steamworks_sid_to_name(chatMsg->m_ulSender), 20, PURPLE_TYPING);
@@ -309,12 +349,14 @@ steamworks_eventloop(gpointer userdata)
 			{
 				const gchar *username = steamworks_sid_to_name(friendadd->m_ulSteamID);
 				PurpleBuddy *buddy = purple_find_buddy(pc->account, username);
+				const gchar *alias = steam->friends->GetFriendPersonaName(friendadd->m_ulSteamID);
 				if (!buddy)
 				{
-					const gchar *alias = steam->friends->GetFriendPersonaName(friendadd->m_ulSteamID);
 					buddy = purple_buddy_new(pc->account, username, alias);
 					purple_blist_add_buddy(buddy, NULL, purple_find_group("Steam"), NULL);
 				}
+				serv_got_alias(pc, username, alias);
+				buddy->proto_data = &(friendadd->m_ulSteamID);
 				EPersonaState state = steam->friends->GetFriendPersonaState(friendadd->m_ulSteamID);
 				purple_debug_info("steam", "Friend state %d ", state);
 				const gchar *status_id = steamworks_personastate_to_statustype(state);
@@ -330,8 +372,7 @@ steamworks_eventloop(gpointer userdata)
 			LobbyInvite_t *invite = (LobbyInvite_t *)CallbackMsg.m_pubParam;
 			CSteamID user = invite->m_ulSteamIDUser;
 			CSteamID lobby = invite->m_ulSteamIDLobby;
-			guint64 gameid;
-			steam->friends->GetFriendGamePlayed(user, &gameid, NULL, NULL, NULL);
+			guint64 gameid = steamworks_get_friend_gameid(steam, user);
 			gchar *message = g_strdup_printf("/me has invited you to <a href=\"steam://joinlobby/%" G_GUINT64_FORMAT "/%" G_GUINT64_FORMAT "/%" G_GUINT64_FORMAT "\">join their game</a>",
 				gameid, lobby, user);
 			serv_got_im(pc, steamworks_sid_to_name(user), message, (PurpleMessageFlags)(PURPLE_MESSAGE_RECV | PURPLE_MESSAGE_SYSTEM), time(NULL));
@@ -342,11 +383,13 @@ steamworks_eventloop(gpointer userdata)
 			purple_debug_info("steam", "received chatroominvite event\n");
 			// invited to chat room
 			ChatRoomInvite_t *invite = (ChatRoomInvite_t *)CallbackMsg.m_pubParam;
-			gchar *chatid = g_strdup(steamworks_sid_to_name(invite->m_ulSteamIDChat));
-			gchar *friendid = g_strdup(steamworks_sid_to_name(invite->m_ulSteamIDFriendChat));
-			serv_got_chat_invite(pc, chatid, friendid, NULL, steamworks_chat_defaults(pc, chatid));
-			g_free(chatid);
-			g_free(friendid);
+			if(invite->m_EChatRoomType == k_EChatRoomTypeMUC)
+			{
+				purple_debug_info("steam", "%s\n", invite->m_ulSteamIDChat.SteamRender());
+				gchar *chatid = g_strdup(steamworks_sid_to_name(invite->m_ulSteamIDChat));
+				serv_got_chat_invite(pc, chatid, NULL, NULL, steamworks_chat_defaults(pc, chatid));
+				g_free(chatid);
+			}
 		}	break;
 		case ChatRoomMsg_t::k_iCallback:
 		{
@@ -384,6 +427,14 @@ steamworks_eventloop(gpointer userdata)
 			g_free(friendid);
 			g_free(message);
 		}	break;
+		case ChatRoomEnter_t::k_iCallback:
+		{
+			purple_debug_info("steam", "received chatenter event\n");
+			// chat room message
+			ChatRoomEnter_t *room = (ChatRoomEnter_t *)CallbackMsg.m_pubParam;
+			const gchar *friendid = steamworks_sid_to_name(room->m_ulSteamIDFriendChat);
+			serv_got_joined_chat(pc, room->m_ulSteamIDChat.GetAccountID(), friendid);
+		} break;
 		default:
 			purple_debug_warning("steam", "unhandled event!\n");
 			break;
@@ -406,10 +457,9 @@ steamworks_status_text(PurpleBuddy *buddy)
 		return NULL;
 
 	//Get game info to use for status message
-	FriendGameInfo_t friendinfo;
-	guint64 gameid;
+	guint64 gameid = steamworks_get_friend_gameid(steam, steamID);
 	gchar *appname = NULL;
-	if (steam->friends->GetFriendGamePlayed( steamID, &gameid, NULL, NULL, NULL ))
+	if (gameid)
 	{
 		gchar *tempname;
 		tempname = steamworks_gameid_to_gamename(steam, gameid);
@@ -417,7 +467,7 @@ steamworks_status_text(PurpleBuddy *buddy)
 		{
 			tempname = g_strdup_printf("%" G_GUINT64_FORMAT, gameid);
 		}
-		appname = g_strdup_printf("In game %s", tempname);
+		appname = g_markup_printf_escaped("In game %s", tempname);
 		g_free(tempname);
 	}
 	
@@ -504,7 +554,7 @@ steamworks_set_status(PurpleAccount *account, PurpleStatus *status)
 	}
 	
 	purple_debug_info("steam", "Setting status to %d\n", state);
-	steam->friends->SetPersonaState(state);
+	steam->clientfriends->SetPersonaState(state);
 }
 
 gint
@@ -541,11 +591,11 @@ void steamworks_add_buddy(PurpleConnection *pc, PurpleBuddy *buddy, PurpleGroup 
 	{
 		//Looks like a valid steam uid
 		//Probably from adding buddy when they added us first
-		steam->friends->AddFriend(steamworks_name_to_sid(buddy->name));
+		steam->clientfriends->AddFriend(steamworks_name_to_sid(buddy->name));
 	} else {
 		//Looks like an email address or name
 		//Probably from adding buddy through buddy list
-		steam->friends->AddFriendByName(buddy->name);
+		steam->clientfriends->AddFriendByName(buddy->name);
 		purple_blist_remove_buddy(buddy);
 	}
 }
@@ -555,19 +605,26 @@ void steamworks_remove_buddy(PurpleConnection *pc, PurpleBuddy *buddy, PurpleGro
 	SteamInfo *steam = (SteamInfo *)pc->proto_data;
 	
 	if (g_ascii_strtoull(buddy->name, NULL, 10))
-		steam->friends->RemoveFriend(steamworks_name_to_sid(buddy->name));
+		steam->clientfriends->RemoveFriend(steamworks_name_to_sid(buddy->name));
 }
 
 void
 steamworks_alias_buddy(PurpleConnection *pc, const char *who, const char *alias)
 {
+	CSteamID sid;
+	PurpleBuddy *buddy;
 	SteamInfo *steam = (SteamInfo *)pc->proto_data;
-	if (steam && steam->clientfriends)
-	{
-		if (!alias)
-			alias = "";
-		steam->clientfriends->SetFriendAlias(steamworks_name_to_sid(who), alias);
-	}
+	
+	if (!alias)
+		alias = "";
+	
+	buddy = purple_find_buddy(pc->account, who);
+	if (buddy && buddy->proto_data)
+		sid = *((CSteamID *)buddy->proto_data);
+	else
+		sid = steamworks_name_to_sid(who);
+		
+	steam->clientfriends->SetFriendAlias(sid, alias);
 }
 
 void
@@ -653,6 +710,7 @@ GHashTable *
 steamworks_chat_defaults(PurpleConnection *pc, const char *chat_name)
 {
 	GHashTable *defaults;
+	purple_debug_info("steam", "chat_defaults %s\n", chat_name);
 
 	defaults = g_hash_table_new_full(g_str_hash, g_str_equal, NULL, g_free);
 
@@ -668,6 +726,7 @@ void
 steamworks_reject_chat(PurpleConnection *pc, GHashTable *components)
 {
 	SteamInfo *steam = (SteamInfo *)pc->proto_data;
+	purple_debug_info("steam", "reject_chat\n");
 
 	if (steam && steam->clientfriends && components)
 	{
@@ -743,13 +802,13 @@ steamworks_tooltip_text(PurpleBuddy *buddy, PurpleNotifyUserInfo *user_info, gbo
 	
 	if (steam && steam->friends)
 	{
-		FriendGameInfo_t friendinfo;
-		guint64 gameid;
-		if (steam->friends->GetFriendGamePlayed( steamID, &gameid, NULL, NULL, NULL ))
+		guint64 gameid = steamworks_get_friend_gameid(steam, steamID);
+		if (gameid)
 		{
 			gchar *gamename = NULL;
 			gamename = steamworks_gameid_to_gamename(steam, gameid);
-			purple_notify_user_info_add_pair(user_info, "In game", gamename);
+			if (gamename)
+				purple_notify_user_info_add_pair(user_info, "In game", gamename);
 			g_free(gamename);
 		}
 	}
@@ -768,8 +827,8 @@ steamworks_close(PurpleConnection *pc)
 
 	purple_timeout_remove(steam->event_timer);
 
-	if (steam->friends)
-		steam->friends->SetPersonaState(k_EPersonaStateOffline);
+	if (steam->clientfriends)
+		steam->clientfriends->SetPersonaState(k_EPersonaStateOffline);
 	
 	//if (steam->client && steam->pipe)
 	//{
@@ -856,9 +915,25 @@ steamworks_login(PurpleAccount *account)
 	}
 	steam->apps = (ISteamApps001 *)steam->client->GetISteamApps(steam->user, steam->pipe, STEAMAPPS_INTERFACE_VERSION_001);
 
-	IClientEngine *clientEngine = (IClientEngine *)steam->factory( CLIENTENGINE_INTERFACE_VERSION, NULL );
-	if (clientEngine)
-		steam->clientfriends = clientEngine->GetIClientFriends( steam->user, steam->pipe, CLIENTFRIENDS_INTERFACE_VERSION );
+	IClientEngine *clientEngine = (IClientEngine *)steam->factory( CLIENTENGINE_INTERFACE_VERSION_002, NULL );
+	if (!clientEngine)
+	{
+		clientEngine = (IClientEngine *)steam->factory( "CLIENTENGINE_INTERFACE_VERSION001", NULL );
+		if (!clientEngine)
+		{
+			purple_connection_error(pc, "Could not load client engine\n");
+			return;
+		}
+	}
+	//steam->clientfriends = clientEngine->GetIClientFriends( steam->user, steam->pipe, CLIENTFRIENDS_INTERFACE_VERSION );
+	HSteamPipe clientPipe = clientEngine->CreateSteamPipe();
+	HSteamUser clientUser = clientEngine->ConnectToGlobalUser(clientPipe);
+	steam->clientfriends = clientEngine->GetIClientFriends( clientUser, clientPipe, CLIENTFRIENDS_INTERFACE_VERSION );
+	if (!steam->clientfriends)
+	{
+		purple_connection_error(pc, "Could not load client friends\n");
+		return;
+	}
 
 	purple_connection_set_state(pc, PURPLE_CONNECTED);
 	steamworks_set_status(account, purple_account_get_active_status(account));
@@ -868,9 +943,11 @@ steamworks_login(PurpleAccount *account)
 	steam->suser = (ISteamUser005 *)steam->client->GetISteamUser(steam->user, steam->pipe, STEAMUSER_INTERFACE_VERSION_005);
 	if (steam->suser)
 	{
-		if (!steam->suser->LoggedOn())
+		if (!steam->suser->BLoggedOn())
 		{
 			purple_debug_info("steam", "Not logged in.  Logging in...\n");
+			steam->suser->SetAccountName(account->username);
+			steam->suser->SetPassword(account->password);
 			steam->suser->LogOn(steam->suser->GetSteamID());
 		}
 		steam->suser->SetSelfAsPrimaryChatDestination();
@@ -902,6 +979,8 @@ steamworks_login(PurpleAccount *account)
 			buddy = purple_buddy_new(account, id, alias);
 			purple_blist_add_buddy(buddy, NULL, group, NULL);
 		}
+		serv_got_alias(pc, id, alias);
+		buddy->proto_data = &steamID;
 		
 		EPersonaState state = steam->friends->GetFriendPersonaState(steamID);
 		purple_debug_info("steam", "Friend state %d ", state);

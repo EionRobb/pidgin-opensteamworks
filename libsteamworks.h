@@ -3,6 +3,10 @@
 #	define PURPLE_PLUGINS
 #endif
 
+#define STEAMWORKS_CLIENT_INTERFACES
+#define		STEAM_API_NON_VERSIONED_INTERFACES
+#define		STEAMWORKS_CLIENT_INTERFACES
+#define		WLB_WINSECURE
 #include "windows.h"
 #include "winbase.h"
 #include "Steamworks.h"
@@ -17,6 +21,9 @@
 #include "debug.h"
 #include "accountopt.h"
 
+#ifndef CLIENTENGINE_INTERFACE_VERSION_002
+#	define CLIENTENGINE_INTERFACE_VERSION_002 "CLIENTENGINE_INTERFACE_VERSION002"
+#endif
 
 extern "C" {
 	const gchar *steamworks_list_icon(PurpleAccount *account, PurpleBuddy *buddy);
