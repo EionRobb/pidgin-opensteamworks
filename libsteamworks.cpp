@@ -269,7 +269,8 @@ steamworks_eventloop(gpointer userdata)
 		purple_debug_info("steam", "Recieved event type %d\n", CallbackMsg.m_iCallback);
 		switch(CallbackMsg.m_iCallback)
 		{
-		case FriendChatMsg_t::k_iCallback:
+		case FriendChatMsg_t::k_iCallback: // event type 306
+		case 805: // k_iClientFriendsCallbacks + 5
 		{
 			purple_debug_info("steam", "received message event\n");
 			//message or typing notification
@@ -280,13 +281,19 @@ steamworks_eventloop(gpointer userdata)
 				break;
 
 			EChatEntryType msgType;
-			gchar *message = g_new0(gchar, 256);
-
-			if (gint msgLen = steam->friends->GetChatMessage(chatMsg->m_ulSender, chatMsg->m_iChatID, message, 256, &msgType) > 256 )
+			gint msgLen;
+			gint messageSize = 255;
+			gchar *message = g_new0(gchar, messageSize + 1);
+			
+			while((msgLen = steam->friends->GetChatMessage(chatMsg->m_ulSender, chatMsg->m_iChatID, message, messageSize, &msgType)) >= messageSize)
 			{
+				//purple_debug_info("steam", "message has new length of %d\n", msgLen);
+				if (msgLen > messageSize)
+					messageSize = msgLen + 1;
+				else
+					messageSize *= 2;
 				g_free(message);
-				message = g_new0(gchar, msgLen + 1);
-				steam->friends->GetChatMessage(chatMsg->m_ulSender, chatMsg->m_iChatID, message, msgLen, &msgType);
+				message = g_new0(gchar, messageSize + 1);
 			}
 
 			if (msgType & k_EChatEntryTypeTyping)
@@ -330,7 +337,8 @@ steamworks_eventloop(gpointer userdata)
 			}
 			purple_debug_info("steam", "user %d changed state %d\n", state->m_ulSteamID, state->m_nChangeFlags);
 		}	break;
-		case UserRequestingFriendship_t::k_iCallback:
+		case UserRequestingFriendship_t::k_iCallback: // 302
+		case 804: //k_iClientFriendsCallbacks + 4
 		{
 			purple_debug_info("steam", "received friendrequest event\n");
 			//requesting friendship
@@ -340,7 +348,8 @@ steamworks_eventloop(gpointer userdata)
 			const gchar *alias = steam->friends->GetFriendPersonaName(request->m_ulSteamID);
 			purple_account_request_add(pc->account, username, NULL, alias, NULL);
 		}	break;
-		case FriendAdded_t::k_iCallback:
+		case FriendAdded_t::k_iCallback: // event type 301
+		case 803: //k_iClientFriendsCallbacks + 3
 		{
 			purple_debug_info("steam", "received friendadded event\n");
 			//friend added to buddylist
@@ -378,7 +387,8 @@ steamworks_eventloop(gpointer userdata)
 			serv_got_im(pc, steamworks_sid_to_name(user), message, (PurpleMessageFlags)(PURPLE_MESSAGE_RECV | PURPLE_MESSAGE_SYSTEM), time(NULL));
 			g_free(message);
 		}	break;
-		case ChatRoomInvite_t::k_iCallback:
+		case ChatRoomInvite_t::k_iCallback: // event type 308
+		case 807: //k_iClientFriendsCallbacks + 7
 		{
 			purple_debug_info("steam", "received chatroominvite event\n");
 			// invited to chat room
@@ -391,7 +401,8 @@ steamworks_eventloop(gpointer userdata)
 				g_free(chatid);
 			}
 		}	break;
-		case ChatRoomMsg_t::k_iCallback:
+		case ChatRoomMsg_t::k_iCallback: // event type 311
+		case 810: //k_iClientFriendsCallbacks + 10
 		{
 			purple_debug_info("steam", "received chatroommsg event\n");
 			// chat room message
@@ -427,7 +438,8 @@ steamworks_eventloop(gpointer userdata)
 			g_free(friendid);
 			g_free(message);
 		}	break;
-		case ChatRoomEnter_t::k_iCallback:
+		case ChatRoomEnter_t::k_iCallback: // event type 309
+		case 808: //k_iClientFriendsCallbacks + 8
 		{
 			purple_debug_info("steam", "received chatenter event\n");
 			// chat room message
@@ -571,7 +583,7 @@ steamworks_send_im(PurpleConnection *pc, const char *who, const char *message, P
 	if (purple_message_meify(stripped, -1))
 	{
 		purple_debug_info("steam", "sending emote...\n");
-		success = steam->friends->SendMsgToFriend(steamID, k_EChatEntryTypeEmote, stripped, (int)strlen(stripped)-3);
+		success = steam->friends->SendMsgToFriend(steamID, k_EChatEntryTypeEmote, stripped, (int)strlen(stripped)+1);
 	} else {
 		purple_debug_info("steam", "sending message...\n");
 		success = steam->friends->SendMsgToFriend(steamID, k_EChatEntryTypeChatMsg, stripped, (int)strlen(stripped)+1);
