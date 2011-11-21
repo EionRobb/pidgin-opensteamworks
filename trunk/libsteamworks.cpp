@@ -27,8 +27,10 @@ typedef struct {
 	ISteamUser005 *suser;
 	IClientFriends *clientfriends;
 	ISteamApps001 *apps;
+	ISteamMatchmaking008 *matchmaking;
 
 	guint event_timer;
+	GHashTable *sent_messages_table;
 } SteamInfo;
 
 /*const CSteamID 
@@ -270,22 +272,26 @@ steamworks_eventloop(gpointer userdata)
 		switch(CallbackMsg.m_iCallback)
 		{
 		case FriendChatMsg_t::k_iCallback: // event type 306
-		case 805: // k_iClientFriendsCallbacks + 5
+		//case 805: // k_iClientFriendsCallbacks + 5
 		{
+			PurpleMessageFlags msgflags = PURPLE_MESSAGE_RECV;
+			
 			purple_debug_info("steam", "received message event\n");
 			//message or typing notification
 			FriendChatMsg_t *chatMsg = (FriendChatMsg_t *)CallbackMsg.m_pubParam;
-
-			//Check that the message didn't come from ourselves
-			if (chatMsg->m_ulSender == steam->suser->GetSteamID())
-				break;
 
 			EChatEntryType msgType;
 			gint msgLen;
 			gint messageSize = 255;
 			gchar *message = g_new0(gchar, messageSize + 1);
+			CSteamID chatFriend = chatMsg->m_ulSender;
+			if (chatMsg->m_ulSender == steam->suser->GetSteamID())
+			{
+				chatFriend = chatMsg->m_ulReceiver;
+				msgflags = PURPLE_MESSAGE_SEND;
+			}
 			
-			while((msgLen = steam->friends->GetChatMessage(chatMsg->m_ulSender, chatMsg->m_iChatID, message, messageSize, &msgType)) >= messageSize)
+			while((msgLen = steam->friends->GetChatMessage(chatFriend, chatMsg->m_iChatID, message, messageSize, &msgType)) >= messageSize)
 			{
 				//purple_debug_info("steam", "message has new length of %d\n", msgLen);
 				if (msgLen > messageSize)
@@ -295,23 +301,31 @@ steamworks_eventloop(gpointer userdata)
 				g_free(message);
 				message = g_new0(gchar, messageSize + 1);
 			}
+			
+			//Check that the message didn't come from ourselves
+			if (chatMsg->m_ulSender == steam->suser->GetSteamID() && g_hash_table_remove(steam->sent_messages_table, message))
+			{
+				break;
+			}
 
 			if (msgType & k_EChatEntryTypeTyping)
 			{
-				serv_got_typing(pc, steamworks_sid_to_name(chatMsg->m_ulSender), 20, PURPLE_TYPING);
-			} else if (msgType & k_EChatEntryTypeChatMsg) {
+				serv_got_typing(pc, steamworks_sid_to_name(chatFriend), 20, PURPLE_TYPING);
+			} else if ((msgType & k_EChatEntryTypeChatMsg) || (!msgType && message && *message)) {
 				gchar *html = purple_strdup_withhtml(message);
-				serv_got_im(pc, steamworks_sid_to_name(chatMsg->m_ulSender), html, PURPLE_MESSAGE_RECV, time(NULL));
+				serv_got_im(pc, steamworks_sid_to_name(chatFriend), html, msgflags, time(NULL));
 				g_free(html);
 			} else if (msgType & k_EChatEntryTypeEmote) {
 				gchar *emote = g_strconcat("/me ", message, NULL);
 				gchar *html = purple_strdup_withhtml(emote);
-				serv_got_im(pc, steamworks_sid_to_name(chatMsg->m_ulSender), html, PURPLE_MESSAGE_RECV, time(NULL));
+				serv_got_im(pc, steamworks_sid_to_name(chatFriend), html, msgflags, time(NULL));
 				g_free(html);
 				g_free(emote);
 			} else if (msgType & k_EChatEntryTypeInviteGame) {
 				purple_debug_warning("steam", "invite to game message\n");
 				purple_debug_info("steam", "invite message '%s'\n", message);
+			} else {
+				purple_debug_info("steam", "unknown msgType %d\n", msgType);
 			}
 			g_free(message);
 		}	break;
@@ -338,7 +352,7 @@ steamworks_eventloop(gpointer userdata)
 			purple_debug_info("steam", "user %d changed state %d\n", state->m_ulSteamID, state->m_nChangeFlags);
 		}	break;
 		case UserRequestingFriendship_t::k_iCallback: // 302
-		case 804: //k_iClientFriendsCallbacks + 4
+		//case 804: //k_iClientFriendsCallbacks + 4
 		{
 			purple_debug_info("steam", "received friendrequest event\n");
 			//requesting friendship
@@ -349,7 +363,7 @@ steamworks_eventloop(gpointer userdata)
 			purple_account_request_add(pc->account, username, NULL, alias, NULL);
 		}	break;
 		case FriendAdded_t::k_iCallback: // event type 301
-		case 803: //k_iClientFriendsCallbacks + 3
+		//case 803: //k_iClientFriendsCallbacks + 3
 		{
 			purple_debug_info("steam", "received friendadded event\n");
 			//friend added to buddylist
@@ -388,7 +402,7 @@ steamworks_eventloop(gpointer userdata)
 			g_free(message);
 		}	break;
 		case ChatRoomInvite_t::k_iCallback: // event type 308
-		case 807: //k_iClientFriendsCallbacks + 7
+		//case 807: //k_iClientFriendsCallbacks + 7
 		{
 			purple_debug_info("steam", "received chatroominvite event\n");
 			// invited to chat room
@@ -402,33 +416,41 @@ steamworks_eventloop(gpointer userdata)
 			}
 		}	break;
 		case ChatRoomMsg_t::k_iCallback: // event type 311
-		case 810: //k_iClientFriendsCallbacks + 10
+		//case 810: //k_iClientFriendsCallbacks + 10
 		{
 			purple_debug_info("steam", "received chatroommsg event\n");
 			// chat room message
 			ChatRoomMsg_t *msg = (ChatRoomMsg_t *)CallbackMsg.m_pubParam;
 			EChatEntryType msgType;
-			CSteamID steamUser;
-
-			if (!steam->clientfriends)
-				break;
-
-			gchar *message = g_new0(gchar, 256);
-
-			if (gint msgLen = steam->clientfriends->GetChatRoomEntry(msg->m_ulSteamIDChat, msg->m_iChatID, &steamUser, message, 256, &msgType) > 256)
+			CSteamID steamUser = msg->m_ulSteamIDUser;
+			
+			gint msgLen;
+			gint messageSize = 255;
+			gchar *message = g_new0(gchar, messageSize + 1);
+			
+			purple_debug_info("steam", "test1\n");
+			while((msgLen = steam->clientfriends->GetChatRoomEntry(msg->m_ulSteamIDChat, msg->m_iChatID, NULL, message, messageSize, &msgType)) >= messageSize)
 			{
+				purple_debug_info("steam", "message has new length of %d\n", msgLen);
+				if (msgLen > messageSize)
+					messageSize = msgLen + 1;
+				else
+					messageSize *= 2;
 				g_free(message);
-				message = g_new0(gchar, msgLen + 1);
-				steam->clientfriends->GetChatRoomEntry(msg->m_ulSteamIDChat, msg->m_iChatID, &steamUser, message, msgLen, &msgType);
+				message = g_new0(gchar, messageSize + 1);
 			}
+			purple_debug_info("steam", "test2 %s\n", message);
 			
 			gint chatid = msg->m_ulSteamIDChat.GetAccountID();
 			gchar *friendid = g_strdup(steamworks_sid_to_name(steamUser));
+			purple_debug_info("steam", "test3 %d\n", msg->m_eChatEntryType);
 			if (msg->m_eChatEntryType & k_EChatEntryTypeChatMsg) {
+			purple_debug_info("steam", "test4\n");
 				gchar *html = purple_strdup_withhtml(message);
 				serv_got_chat_in(pc, chatid, friendid, PURPLE_MESSAGE_RECV, html, time(NULL));
 				g_free(html);
 			} else if (msg->m_eChatEntryType & k_EChatEntryTypeEmote) {
+			purple_debug_info("steam", "test5\n");
 				gchar *emote = g_strconcat("/me ", message, NULL);
 				gchar *html = purple_strdup_withhtml(emote);
 				serv_got_chat_in(pc, chatid, friendid, PURPLE_MESSAGE_RECV, html, time(NULL));
@@ -439,7 +461,7 @@ steamworks_eventloop(gpointer userdata)
 			g_free(message);
 		}	break;
 		case ChatRoomEnter_t::k_iCallback: // event type 309
-		case 808: //k_iClientFriendsCallbacks + 8
+		//case 808: //k_iClientFriendsCallbacks + 8
 		{
 			purple_debug_info("steam", "received chatenter event\n");
 			// chat room message
@@ -590,6 +612,8 @@ steamworks_send_im(PurpleConnection *pc, const char *who, const char *message, P
 	}
 	purple_debug_info("steam", "sent.\n");
 	
+	g_hash_table_insert(steam->sent_messages_table, g_strdup(stripped), NULL);
+	
 	g_free(stripped);
 	return success;
 }
@@ -689,7 +713,7 @@ steamworks_chat_send(PurpleConnection *pc, int id, const char *message, PurpleMe
 		if (purple_message_meify(stripped, -1))
 		{
 			purple_debug_info("steam", "sending emote...\n");
-			success = steam->clientfriends->SendChatMsg(steamID, k_EChatEntryTypeEmote, stripped, (int)strlen(stripped)-3);
+			success = steam->clientfriends->SendChatMsg(steamID, k_EChatEntryTypeEmote, stripped, (int)strlen(stripped)+1);
 		} else {
 			purple_debug_info("steam", "sending message...\n");
 			success = steam->clientfriends->SendChatMsg(steamID, k_EChatEntryTypeChatMsg, stripped, (int)strlen(stripped)+1);
@@ -836,9 +860,11 @@ steamworks_close(PurpleConnection *pc)
 
 	if (!steam)
 		return;
-
+		
 	purple_timeout_remove(steam->event_timer);
 
+	g_hash_table_destroy(steam->sent_messages_table);
+	
 	if (steam->clientfriends)
 		steam->clientfriends->SetPersonaState(k_EPersonaStateOffline);
 	
@@ -858,6 +884,7 @@ steamworks_close(PurpleConnection *pc)
 	steam->utils = NULL;
 	steam->clientfriends = NULL;
 	steam->apps = NULL;
+	steam->matchmaking = NULL;
 	
 	g_free(steam);
 
@@ -876,6 +903,8 @@ steamworks_login(PurpleAccount *account)
 	
 	steam = g_new0(SteamInfo, 1);
 	pc->proto_data = steam;
+	
+	steam->sent_messages_table = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
 
 	steam->loader = new CSteamAPILoader();
 	if (!steam->loader)
@@ -926,6 +955,7 @@ steamworks_login(PurpleAccount *account)
 		return;
 	}
 	steam->apps = (ISteamApps001 *)steam->client->GetISteamApps(steam->user, steam->pipe, STEAMAPPS_INTERFACE_VERSION_001);
+	steam->matchmaking = (ISteamMatchmaking008 *)steam->client->GetISteamMatchmaking(steam->user, steam->pipe, STEAMMATCHMAKING_INTERFACE_VERSION_008);
 
 	IClientEngine *clientEngine = (IClientEngine *)steam->factory( CLIENTENGINE_INTERFACE_VERSION_002, NULL );
 	if (!clientEngine)
