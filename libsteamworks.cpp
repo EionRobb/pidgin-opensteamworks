@@ -218,6 +218,7 @@ steamworks_gameid_to_gamename(SteamInfo *steam, guint64 gameid)
 		if (steam->apps->GetAppData((AppId_t) gameid, "name", name, 256))
 			return name;
 		g_free(name);
+		name = NULL;
 	}
 
 	if (!appinfo)
@@ -231,6 +232,8 @@ steamworks_gameid_to_gamename(SteamInfo *steam, guint64 gameid)
 		if (!success)
 			return NULL;
 	}
+	
+	purple_debug_info("steam", "Searching appinfo.vdf\n");
 
 	// Find:
 	// \1gameid\0(id)\0
@@ -375,7 +378,7 @@ steamworks_eventloop(gpointer userdata)
 				const gchar *alias = steam->friends->GetFriendPersonaName(friendadd->m_ulSteamID);
 				if (!buddy)
 				{
-					buddy = purple_buddy_new(pc->account, username, alias);
+					buddy = purple_buddy_new(pc->account, username, NULL);
 					purple_blist_add_buddy(buddy, NULL, purple_find_group("Steam"), NULL);
 				}
 				serv_got_alias(pc, username, alias);
@@ -1018,14 +1021,14 @@ steamworks_login(PurpleAccount *account)
 		buddy = purple_find_buddy(account, id);
 		if (!buddy)
 		{
-			buddy = purple_buddy_new(account, id, alias);
+			buddy = purple_buddy_new(account, id, NULL);
 			purple_blist_add_buddy(buddy, NULL, group, NULL);
 		}
 		serv_got_alias(pc, id, alias);
 		buddy->proto_data = &steamID;
 		
 		EPersonaState state = steam->friends->GetFriendPersonaState(steamID);
-		purple_debug_info("steam", "Friend state %d ", state);
+		purple_debug_info("steam", "Friend state %d\n", state);
 		const gchar *status_id = steamworks_personastate_to_statustype(state);
 		purple_debug_info("steam", "status_id %s\n", status_id);
 		purple_prpl_got_user_status(account, id, status_id, NULL);
