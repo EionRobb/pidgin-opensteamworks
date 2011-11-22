@@ -48,6 +48,7 @@ extern "C" {
 	void steamworks_chat_leave(PurpleConnection *, int id);
 	void steamworks_join_chat(PurpleConnection *, GHashTable *components);
 	void steamworks_tooltip_text(PurpleBuddy *buddy, PurpleNotifyUserInfo *user_info, gboolean full);
+	const gchar *steamworks_list_emblem(PurpleBuddy *buddy);
 
 	static PurplePluginProtocolInfo prpl_info = {
 		(PurpleProtocolOptions) (OPT_PROTO_CHAT_TOPIC),// options
@@ -55,7 +56,7 @@ extern "C" {
 		NULL,                     // protocol_options
 		{"png,jpeg",0,0,64,64,0,PURPLE_ICON_SCALE_DISPLAY},// icon_spec
 		steamworks_list_icon,     // list_icon
-		NULL,                     // list_emblem
+		steamworks_list_emblem,   // list_emblem
 		steamworks_status_text,   // status_text
 		steamworks_tooltip_text,  // tooltip_text
 		steamworks_status_types,  // status_types

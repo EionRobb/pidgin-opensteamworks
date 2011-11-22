@@ -342,7 +342,7 @@ steamworks_eventloop(gpointer userdata)
 				const gchar *alias = steam->friends->GetFriendPersonaName( state->m_ulSteamID );
 				serv_got_alias(pc, steamworks_sid_to_name(state->m_ulSteamID), alias);
 			}
-			if (state->m_nChangeFlags & k_EPersonaChangeStatus)
+			if (state->m_nChangeFlags & (k_EPersonaChangeStatus | k_EPersonaChangeGamePlayed))
 			{
 				EPersonaState pstate = steam->friends->GetFriendPersonaState(state->m_ulSteamID);
 				const gchar *status_id = steamworks_personastate_to_statustype(pstate);
@@ -839,7 +839,7 @@ steamworks_tooltip_text(PurpleBuddy *buddy, PurpleNotifyUserInfo *user_info, gbo
 	PurpleStatus *status = purple_presence_get_active_status(presence);
 	purple_notify_user_info_add_pair(user_info, "Status", purple_status_get_name(status));
 	
-	if (steam && steam->friends)
+	if (steam)
 	{
 		guint64 gameid = steamworks_get_friend_gameid(steam, steamID);
 		if (gameid)
@@ -853,6 +853,20 @@ steamworks_tooltip_text(PurpleBuddy *buddy, PurpleNotifyUserInfo *user_info, gbo
 	}
 }
 
+const gchar *
+steamworks_list_emblem(PurpleBuddy *buddy)
+{
+	PurpleConnection *pc = purple_account_get_connection(buddy->account);
+	SteamInfo *steam = (SteamInfo *)pc->proto_data;
+	CSteamID steamID = steamworks_name_to_sid(buddy->name);
+	
+	if (steam && steamworks_get_friend_gameid(steam, steamID))
+	{
+		return "game";
+	}
+	
+	return NULL;
+}
 
 void
 steamworks_close(PurpleConnection *pc)
