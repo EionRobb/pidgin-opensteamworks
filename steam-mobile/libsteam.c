@@ -148,7 +148,7 @@ steam_get_friend_list_cb(SteamAccount *sa, JsonObject *obj, gpointer user_data)
 {
 	JsonArray *friends = json_object_get_array_member(obj, "friends");
 	PurpleGroup *group = NULL;
-	gchar *users_to_fetch = NULL, *temp;
+	gchar *users_to_fetch = "", *temp;
 	guint index;
 	
 	for(index = 0; index < json_array_get_length(friends); index++)
@@ -176,15 +176,18 @@ steam_get_friend_list_cb(SteamAccount *sa, JsonObject *obj, gpointer user_data)
 		}
 	}
 	
-	GString *url = g_string_new("/ISteamUserOAuth/GetUserSummaries/v0001?");
-	g_string_append_printf(url, "access_token=%s&", purple_url_encode(purple_account_get_string(sa->account, "access_token", "")));
-	g_string_append_printf(url, "steamids=%s", purple_url_encode(users_to_fetch));
-	
-	steam_post_or_get(sa, STEAM_METHOD_GET | STEAM_METHOD_SSL, NULL, url->str, NULL, steam_got_friend_summaries, NULL, TRUE);
-	
-	g_string_free(url, TRUE);
-	
-	g_free(users_to_fetch);
+	if (users_to_fetch && *users_to_fetch)
+	{
+		GString *url = g_string_new("/ISteamUserOAuth/GetUserSummaries/v0001?");
+		g_string_append_printf(url, "access_token=%s&", purple_url_encode(purple_account_get_string(sa->account, "access_token", "")));
+		g_string_append_printf(url, "steamids=%s", purple_url_encode(users_to_fetch));
+		
+		steam_post_or_get(sa, STEAM_METHOD_GET | STEAM_METHOD_SSL, NULL, url->str, NULL, steam_got_friend_summaries, NULL, TRUE);
+		
+		g_string_free(url, TRUE);
+		
+		g_free(users_to_fetch);
+	}
 }
 
 static void
@@ -291,7 +294,10 @@ steam_login_access_token_cb(SteamAccount *sa, JsonObject *obj, gpointer user_dat
 	}
 	sa->message = (guint) json_object_get_int_member(obj, "message");
 	
+	purple_connection_set_state(sa->pc, PURPLE_CONNECTED);
+	
 	steam_get_friend_list(sa);
+	steam_poll(sa, FALSE, 0);
 }
 
 static void
@@ -329,6 +335,7 @@ steam_login_cb(SteamAccount *sa, JsonObject *obj, gpointer user_data)
 		purple_connection_error_reason(sa->pc, PURPLE_CONNECTION_ERROR_AUTHENTICATION_FAILED, _("Bad username/password or Steam Guard Code required"));
 	} else {
 		purple_account_set_string(sa->account, "access_token", json_object_get_string_member(obj, "access_token"));
+		steam_login_with_access_token(sa);
 	}
 }
 
