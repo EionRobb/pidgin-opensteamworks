@@ -42,6 +42,7 @@
 #endif
 
 #include "accountopt.h"
+#include "blist.h"
 #include "connection.h"
 #include "debug.h"
 #include "dnsquery.h"
@@ -57,6 +58,9 @@
 
 #define FB_MAX_MSG_RETRY 2
 
+#define STEAM_PLUGIN_ID "prpl-steam-mobile"
+#define STEAM_PLUGIN_VERSION "0.1"
+
 typedef struct _SteamAccount SteamAccount;
 typedef struct _SteamBuddy SteamBuddy;
 
@@ -69,6 +73,9 @@ struct _SteamAccount {
 	GQueue *waiting_conns; /**< A list of all SteamConnections waiting to process */
 	GSList *dns_queries;
 	GHashTable *cookie_table;
+	GHashTable *hostname_ip_cache;
+	
+	GHashTable *sent_messages_hash;
 	
 	gchar *umqid;
 	guint message;

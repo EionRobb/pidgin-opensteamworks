@@ -3,13 +3,43 @@
 #include "libsteam.h"
 #include "steam_connection.h"
 
+static const gchar *
+steam_personastate_to_statustype(gint64 state)
+{
+	const char *status_id;
+	PurpleStatusPrimitive prim;
+	switch(state)
+	{
+		default:
+		case 0:
+			prim = PURPLE_STATUS_OFFLINE; 
+			break;
+		case 1:
+			prim = PURPLE_STATUS_AVAILABLE;
+			break;
+		case 2:
+			prim = PURPLE_STATUS_UNAVAILABLE;
+			break;
+		case 3:
+			prim = PURPLE_STATUS_AWAY;
+			break;
+		case 4:
+			prim = PURPLE_STATUS_EXTENDED_AWAY;
+			break;
+	}
+	status_id = purple_primitive_get_id_from_type(prim);
+	return status_id;
+}
+
 static void steam_poll(SteamAccount *sa, gboolean secure, guint message);
 
 static void
-steam_poll_cb(SteamAccount *sa, const JsonObject *obj, gpointer user_data)
+steam_poll_cb(SteamAccount *sa, JsonObject *obj, gpointer user_data)
 {
 	JsonArray *messages = json_object_get_array_member(obj, "messages");
-	for(guint index = 0; index < json_array_get_length(messages); index++)
+	guint index;
+	
+	for(index = 0; index < json_array_get_length(messages); index++)
 	{
 		JsonObject *message = json_array_get_object_element(messages, index);
 		const gchar *type = json_object_get_string_member(message, "type");
@@ -24,6 +54,17 @@ steam_poll_cb(SteamAccount *sa, const JsonObject *obj, gpointer user_data)
 			} else {
 				serv_got_im(sa->pc, json_object_get_string_member(message, "steamid_from"), json_object_get_string_member(message, "text"), PURPLE_MESSAGE_RECV, (time_t) json_object_get_int_member(message, "timestamp"));
 			}
+		} else if (g_str_equal(type, "personastate"))
+		{
+			gint64 personastate = json_object_get_int_member(message, "persona_state");
+			const gchar *steamid = json_object_get_string_member(message, "steamid_from");
+			purple_prpl_got_user_status(sa->account, steamid, steam_personastate_to_statustype(personastate), NULL);
+			serv_got_alias(sa->pc, steamid, json_object_get_string_member(message, "persona_name"));
+		} else if (g_str_equal(type, "personarelationship"))
+		{
+			const gchar *steamid = json_object_get_string_member(message, "steamid_from");
+			if (json_object_get_int_member(message, "persona_state") == 0)
+				purple_blist_remove_buddy(purple_find_buddy(sa->account, steamid));
 		}
 	}
 	
@@ -44,9 +85,12 @@ steam_poll(SteamAccount *sa, gboolean secure, guint message)
 	SteamMethod method = STEAM_METHOD_POST;
 	
 	if (secure == TRUE)
+	{
 		method |= STEAM_METHOD_SSL;
-	
-	g_string_append_printf(post, "access_token=%s&", purple_url_encode(purple_account_get_string(account, "access_token", "")));
+		g_string_append_printf(post, "access_token=%s&", purple_url_encode(purple_account_get_string(sa->account, "access_token", "")));
+	} else {
+		g_string_append_printf(post, "steamid=%s&", purple_url_encode(sa->steamid));
+	}
 	g_string_append_printf(post, "umqid=%s&", purple_url_encode(sa->umqid));
 	g_string_append_printf(post, "message=%ud", message?message:sa->message);
 	
@@ -59,24 +103,55 @@ steam_poll(SteamAccount *sa, gboolean secure, guint message)
 }
 
 static void
-steam_got_friend_summaries(SteamAccount *sa, const JsonObject *obj, gpointer user_data)
+steam_got_friend_summaries(SteamAccount *sa, JsonObject *obj, gpointer user_data)
 {
 	JsonArray *players = json_object_get_array_member(obj, "players");
+	PurpleBuddy *buddy;
+	SteamBuddy *sbuddy;
+	guint index;
 	
-	for(guint index = 0; index < json_array_get_length(players); index++)
+	for(index = 0; index < json_array_get_length(players); index++)
 	{
 		JsonObject *player = json_array_get_object_element(players, index);
+		const gchar *steamid = json_object_get_string_member(player, "steamid");
+		buddy = purple_find_buddy(sa->account, steamid);
+		if (!buddy)
+			continue;
+		sbuddy = buddy->proto_data;
+		if (sbuddy == NULL)
+		{
+			sbuddy = g_new0(SteamBuddy, 1);
+			buddy->proto_data = sbuddy;
+			sbuddy->steamid = g_strdup(steamid);
+		}
+		
+		g_free(sbuddy->personaname); sbuddy->personaname = g_strdup(json_object_get_string_member(player, "personaname"));
+		serv_got_alias(sa->pc, steamid, sbuddy->personaname);
+	
+		g_free(sbuddy->realname); sbuddy->realname = g_strdup(json_object_get_string_member(player, "realname"));
+		g_free(sbuddy->profileurl); sbuddy->profileurl = g_strdup(json_object_get_string_member(player, "profileurl"));
+		g_free(sbuddy->avatar); sbuddy->avatar = g_strdup(json_object_get_string_member(player, "avatar"));
+		g_free(sbuddy->gameid); sbuddy->gameid = g_strdup(json_object_get_string_member(player, "gameid"));
+		g_free(sbuddy->gameextrainfo); sbuddy->gameextrainfo = g_strdup(json_object_get_string_member(player, "gameextrainfo"));
+		g_free(sbuddy->gameserversteamid); sbuddy->gameserversteamid = g_strdup(json_object_get_string_member(player, "gameserversteamid"));
+		g_free(sbuddy->lobbysteamid); sbuddy->lobbysteamid = g_strdup(json_object_get_string_member(player, "lobbysteamid"));
+		
+		sbuddy->lastlogoff = (guint) json_object_get_int_member(player, "lastlogoff");
+		
+		gint64 personastate = json_object_get_int_member(player, "personastate");
+		purple_prpl_got_user_status(sa->account, steamid, steam_personastate_to_statustype(personastate), NULL);
 	}
 }
 
 static void
-steam_get_friend_list_cb(SteamAccount *sa, const JsonObject *obj, gpointer user_data)
+steam_get_friend_list_cb(SteamAccount *sa, JsonObject *obj, gpointer user_data)
 {
 	JsonArray *friends = json_object_get_array_member(obj, "friends");
 	PurpleGroup *group = NULL;
 	gchar *users_to_fetch = NULL, *temp;
+	guint index;
 	
-	for(guint index = 0; index < json_array_get_length(friends); index++)
+	for(index = 0; index < json_array_get_length(friends); index++)
 	{
 		JsonObject *friend = json_array_get_object_element(friends, index);
 		const gchar *steamid = json_object_get_string_member(friend, "steamid");
@@ -102,7 +177,7 @@ steam_get_friend_list_cb(SteamAccount *sa, const JsonObject *obj, gpointer user_
 	}
 	
 	GString *url = g_string_new("/ISteamUserOAuth/GetUserSummaries/v0001?");
-	g_string_append_printf(url, "access_token=%s&", purple_url_encode(purple_account_get_string(account, "access_token", "")));
+	g_string_append_printf(url, "access_token=%s&", purple_url_encode(purple_account_get_string(sa->account, "access_token", "")));
 	g_string_append_printf(url, "steamids=%s", purple_url_encode(users_to_fetch));
 	
 	steam_post_or_get(sa, STEAM_METHOD_GET | STEAM_METHOD_SSL, NULL, url->str, NULL, steam_got_friend_summaries, NULL, TRUE);
@@ -117,7 +192,7 @@ steam_get_friend_list(SteamAccount *sa)
 {
 	GString *url = g_string_new("/ISteamUserOAuth/GetFriendList/v0001?");
 	
-	g_string_append_printf(url, "access_token=%s&", purple_url_encode(purple_account_get_string(account, "access_token", "")));
+	g_string_append_printf(url, "access_token=%s&", purple_url_encode(purple_account_get_string(sa->account, "access_token", "")));
 	g_string_append_printf(url, "steamid=%s&", purple_url_encode(sa->steamid));
 	g_string_append(url, "relationship=friend,requestrecipient");
 	
@@ -136,8 +211,45 @@ static const char *steam_list_icon(PurpleAccount *account, PurpleBuddy *buddy)
 	return "steam";
 }
 
+static gchar *steam_status_text(PurpleBuddy *buddy)
+{
+	SteamBuddy *sbuddy = buddy->proto_data;
+
+	if (sbuddy && sbuddy->gameextrainfo)
+		return g_markup_printf_escaped("In game %s", sbuddy->gameextrainfo);
+
+	return NULL;
+}
+
+void
+steam_tooltip_text(PurpleBuddy *buddy, PurpleNotifyUserInfo *user_info, gboolean full)
+{
+	SteamBuddy *sbuddy = buddy->proto_data;
+	
+	if (sbuddy)
+	{
+		purple_notify_user_info_add_pair(user_info, "Name", sbuddy->personaname);
+		purple_notify_user_info_add_pair(user_info, "Real Name", sbuddy->realname);
+		if (sbuddy->gameextrainfo)
+			purple_notify_user_info_add_pair(user_info, "In game", sbuddy->gameextrainfo);
+	}
+}
+
+const gchar *
+steam_list_emblem(PurpleBuddy *buddy)
+{
+	SteamBuddy *sbuddy = buddy->proto_data;
+	
+	if (sbuddy && sbuddy->gameid)
+	{
+		return "game";
+	}
+	
+	return NULL;
+}
+
 GList *
-steamworks_status_types(PurpleAccount *account)
+steam_status_types(PurpleAccount *account)
 {
 	GList *types = NULL;
 	PurpleStatusType *status;
@@ -159,7 +271,7 @@ steamworks_status_types(PurpleAccount *account)
 }
 
 static void
-steam_login_access_token_cb(SteamAccount *sa, const JsonObject *obj, gpointer user_data)
+steam_login_access_token_cb(SteamAccount *sa, JsonObject *obj, gpointer user_data)
 {
 	if (!g_str_equal(json_object_get_string_member(obj, "error"), "OK"))
 	{
@@ -178,6 +290,8 @@ steam_login_access_token_cb(SteamAccount *sa, const JsonObject *obj, gpointer us
 		sa->steamid = g_strdup(json_object_get_string_member(obj, "steamid"));
 	}
 	sa->message = (guint) json_object_get_int_member(obj, "message");
+	
+	steam_get_friend_list(sa);
 }
 
 static void
@@ -200,11 +314,11 @@ steam_set_steam_guard_token_cb(gpointer data, const gchar *steam_guard_token)
 }
 
 static void
-steam_login_cb(SteamAccount *sa, const JsonObject *obj, gpointer user_data)
+steam_login_cb(SteamAccount *sa, JsonObject *obj, gpointer user_data)
 {
 	if(json_object_has_member(obj, "error"))
 	{
-		if (g_str_equal(json_object_get_string_member(obj, "x_errorcode")), "steamguard_code_required")
+		if (g_str_equal(json_object_get_string_member(obj, "x_errorcode"), "steamguard_code_required"))
 		{
 			purple_request_input(NULL, NULL, _("Set your Steam Guard Code"),
 						_("Copy the Steam Guard Code you will have received in your email"), NULL,
@@ -214,7 +328,7 @@ steam_login_cb(SteamAccount *sa, const JsonObject *obj, gpointer user_data)
 		}
 		purple_connection_error_reason(sa->pc, PURPLE_CONNECTION_ERROR_AUTHENTICATION_FAILED, _("Bad username/password or Steam Guard Code required"));
 	} else {
-		purple_account_set_string(sa, "access_token", json_object_get_string_member(obj, "access_token"));
+		purple_account_set_string(sa->account, "access_token", json_object_get_string_member(obj, "access_token"));
 	}
 }
 
@@ -230,7 +344,7 @@ steam_login(PurpleAccount *account)
 		purple_connection_error_reason (pc,
 										PURPLE_CONNECTION_ERROR_NO_SSL_SUPPORT,
 										_("Server requires TLS/SSL for login.  No TLS/SSL support found."));
-		return FALSE;
+		return;
 	}
 	
 	sa->account = account;
@@ -312,7 +426,7 @@ steam_send_typing(PurpleConnection *pc, const gchar *name, PurpleTypingState sta
 		g_string_append_printf(post, "access_token=%s&", purple_url_encode(purple_account_get_string(account, "access_token", "")));
 		g_string_append_printf(post, "umqid=%s&", purple_url_encode(sa->umqid));
 		g_string_append(post, "type=typing&");
-		g_string_append_printf(post, "steamid_dst=%s", who);
+		g_string_append_printf(post, "steamid_dst=%s", name);
 		
 		steam_post_or_get(sa, STEAM_METHOD_POST | STEAM_METHOD_SSL, NULL, "/ISteamWebUserPresenceOAuth/Message/v0001", post->str, NULL, NULL, TRUE);
 		
@@ -322,7 +436,7 @@ steam_send_typing(PurpleConnection *pc, const gchar *name, PurpleTypingState sta
 	return 20;
 }
 
-static void steam_set_status_p(PurpleAccount *account, PurpleStatus *status)
+static void steam_set_status(PurpleAccount *account, PurpleStatus *status)
 {
 }
 
@@ -344,6 +458,27 @@ static gint steam_send_im(PurpleConnection *pc, const gchar *who, const gchar *m
 	g_string_free(post, TRUE);
 	
 	return 1;
+}
+
+static void steam_buddy_free(PurpleBuddy *buddy)
+{
+	SteamBuddy *sbuddy = buddy->proto_data;
+	if (sbuddy != NULL)
+	{
+		buddy->proto_data = NULL;
+
+		g_free(sbuddy->steamid);
+		g_free(sbuddy->personaname);
+		g_free(sbuddy->realname);
+		g_free(sbuddy->profileurl);
+		g_free(sbuddy->avatar);
+		g_free(sbuddy->gameid);
+		g_free(sbuddy->gameextrainfo);
+		g_free(sbuddy->gameserversteamid);
+		g_free(sbuddy->lobbysteamid);
+		
+		g_free(sbuddy);
+	}
 }
 
 /******************************************************************************/
@@ -412,50 +547,50 @@ static PurplePluginProtocolInfo prpl_info = {
 	/* NO_BUDDY_ICONS */    /* icon_spec */
 	{"png,jpeg", 0, 0, 64, 64, 0, PURPLE_ICON_SCALE_DISPLAY}, /* icon_spec */
 	steam_list_icon,           /* list_icon */
-	NULL,                   /* list_emblems */
+	steam_list_emblem,         /* list_emblems */
 	steam_status_text,         /* status_text */
 	steam_tooltip_text,        /* tooltip_text */
-	steam_statuses,            /* status_types */
+	steam_status_types,        /* status_types */
 	steam_node_menu,           /* blist_node_menu */
-	steam_chat_info,           /* chat_info */
-	steam_chat_info_defaults,  /* chat_info_defaults */
+	NULL,//steam_chat_info,           /* chat_info */
+	NULL,//steam_chat_info_defaults,  /* chat_info_defaults */
 	steam_login,               /* login */
 	steam_close,               /* close */
 	steam_send_im,             /* send_im */
-	NULL,                   /* set_info */
+	NULL,                      /* set_info */
 	steam_send_typing,         /* send_typing */
-	steam_get_info,            /* get_info */
-	steam_set_status_p,        /* set_status */
-	steam_set_idle,            /* set_idle */
+	NULL,//steam_get_info,            /* get_info */
+	steam_set_status,          /* set_status */
+	NULL,//steam_set_idle,            /* set_idle */
 	NULL,                   /* change_passwd */
-	steam_add_buddy,           /* add_buddy */
+	NULL,//steam_add_buddy,           /* add_buddy */
 	NULL,                   /* add_buddies */
-	steam_buddy_remove,        /* remove_buddy */
+	NULL,//steam_buddy_remove,        /* remove_buddy */
 	NULL,                   /* remove_buddies */
 	NULL,                   /* add_permit */
 	NULL,                   /* add_deny */
 	NULL,                   /* rem_permit */
 	NULL,                   /* rem_deny */
 	NULL,                   /* set_permit_deny */
-	steam_fake_join_chat,      /* join_chat */
+	NULL,//steam_fake_join_chat,      /* join_chat */
 	NULL,                   /* reject chat invite */
-	steam_get_chat_name,       /* get_chat_name */
+	NULL,//steam_get_chat_name,       /* get_chat_name */
 	NULL,                   /* chat_invite */
-	steam_chat_fake_leave,     /* chat_leave */
+	NULL,//steam_chat_fake_leave,     /* chat_leave */
 	NULL,                   /* chat_whisper */
-	steam_chat_send,           /* chat_send */
+	NULL,//steam_chat_send,           /* chat_send */
 	NULL,                   /* keepalive */
 	NULL,                   /* register_user */
 	NULL,                   /* get_cb_info */
 	NULL,                   /* get_cb_away */
 	NULL,                   /* alias_buddy */
-	steam_group_buddy_move,    /* group_buddy */
-	steam_group_rename,        /* rename_group */
+	NULL,//steam_group_buddy_move,    /* group_buddy */
+	NULL,//steam_group_rename,        /* rename_group */
 	steam_buddy_free,          /* buddy_free */
-	steam_conversation_closed, /* convo_closed */
+	NULL,//steam_conversation_closed, /* convo_closed */
 	purple_normalize_nocase,/* normalize */
 	NULL,                   /* set_buddy_icon */
-	steam_group_remove,        /* remove_group */
+	NULL,//steam_group_remove,        /* remove_group */
 	NULL,                   /* get_cb_real_name */
 	NULL,                   /* set_chat_topic */
 	NULL,                   /* find_blist_chat */
@@ -474,7 +609,7 @@ static PurplePluginProtocolInfo prpl_info = {
 	NULL,                   /* attention_types */
 #if PURPLE_MAJOR_VERSION >= 2 && PURPLE_MINOR_VERSION >= 5
 	sizeof(PurplePluginProtocolInfo), /* struct_size */
-	steam_get_account_text_table, /* get_account_text_table */
+	NULL,//steam_get_account_text_table, /* get_account_text_table */
 #else
 	(gpointer) sizeof(PurplePluginProtocolInfo)
 #endif
@@ -489,13 +624,13 @@ static PurplePluginInfo info = {
 	0, 						/* flags */
 	NULL, 						/* dependencies */
 	PURPLE_PRIORITY_DEFAULT, 			/* priority */
-	steam_PLUGIN_ID,				/* id */
-	"steam", 					/* name */
-	steam_PLUGIN_VERSION, 			/* version */
-	N_("steam Protocol Plugin"), 		/* summary */
-	N_("steam Protocol Plugin"), 		/* description */
+	STEAM_PLUGIN_ID,				/* id */
+	"Steam", 					/* name */
+	STEAM_PLUGIN_VERSION, 			/* version */
+	N_("Steam Protocol Plugin"), 		/* summary */
+	N_("Steam Protocol Plugin"), 		/* description */
 	"Eion Robb <eionrobb@gmail.com>", 		/* author */
-	"http://pidgin-steamchat.googlecode.com/",	/* homepage */
+	"http://pidgin-opensteamworks.googlecode.com/",	/* homepage */
 	plugin_load, 					/* load */
 	plugin_unload, 					/* unload */
 	NULL, 						/* destroy */

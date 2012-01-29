@@ -196,7 +196,7 @@ static void steam_connection_process_data(SteamConnection *steamcon)
 				
 				//purple_debug_info("steam", "Got response: %s\n", tmp);
 				purple_debug_info("steam", "executing callback for %s\n", steamcon->url);
-				steamcon->callback(wfconn->wfa, jsonobj, wfconn->user_data);
+				steamcon->callback(steamcon->sa, jsonobj, steamcon->user_data);
 				//json_node_free(root);
 			}
 			g_object_unref(parser);
@@ -447,9 +447,9 @@ static void steam_ssl_connection_error(PurpleSslConnection *ssl,
 	purple_connection_ssl_error(pc, errortype);
 }
 
-void steam_post_or_get(SteamAccount *sa, steamMethod method,
+void steam_post_or_get(SteamAccount *sa, SteamMethod method,
 		const gchar *host, const gchar *url, const gchar *postdata,
-		steamProxyCallbackFunc callback_func, gpointer user_data,
+		SteamProxyCallbackFunc callback_func, gpointer user_data,
 		gboolean keepalive)
 {
 	GString *request;
