@@ -4,7 +4,7 @@
 
 #include "libsteam.h"
 
-typedef void (*SteamProxyCallbackFunc)(SteamAccount *sa, const JsonObject *obj, gpointer user_data);
+typedef void (*SteamProxyCallbackFunc)(SteamAccount *sa, JsonObject *obj, gpointer user_data);
 
 /*
  * This is a bitmask.
