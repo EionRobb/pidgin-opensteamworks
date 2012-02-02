@@ -60,7 +60,7 @@ steam_get_icon(PurpleBuddy *buddy)
 	}
 	
 	sbuddy = buddy->proto_data;
-	if (!sbuddy->avatar || old_avatar && g_str_equal(sbuddy->avatar, old_avatar))
+	if (!sbuddy->avatar || (old_avatar && g_str_equal(sbuddy->avatar, old_avatar)))
 		return;
 	
 	purple_util_fetch_url_request(sbuddy->avatar, TRUE, NULL, FALSE, NULL, FALSE, steam_get_icon_cb, buddy);
@@ -93,7 +93,7 @@ steam_poll_cb(SteamAccount *sa, JsonObject *obj, gpointer user_data)
 		if (g_str_equal(type, "typing"))
 		{
 			serv_got_typing(sa->pc, json_object_get_string_member(message, "steamid_from"), 20, PURPLE_TYPING);
-		} else if (g_str_equal(type, "saytext") || g_str_equal(type, "emote"))
+		} else if (g_str_equal(type, "saytext") || g_str_equal(type, "emote") || g_str_equal(type, "my_saytext") || g_str_equal(type, "my_emote"))
 		{
 			if (json_object_has_member(message, "secure_message_id"))
 			{
@@ -101,14 +101,19 @@ steam_poll_cb(SteamAccount *sa, JsonObject *obj, gpointer user_data)
 				sa->message = MAX(sa->message, (guint) json_object_get_int_member(obj, "secure_message_id"));
 			} else {
 				gchar *text;
-				if (g_str_equal(type, "emote"))
+				PurpleMessageFlags flags;
+				if (g_str_equal(type, "emote") || g_str_equal(type, "my_emote"))
 				{
 					text = g_strconcat("/me ", json_object_get_string_member(message, "text"), NULL);
 				} else {
 					text = g_strdup(json_object_get_string_member(message, "text"));
 				}
 				gchar *html = purple_strdup_withhtml(text);
-				serv_got_im(sa->pc, json_object_get_string_member(message, "steamid_from"), html, PURPLE_MESSAGE_RECV, time(NULL));
+				if (g_str_has_prefix(type, "my_"))
+					flags = PURPLE_MESSAGE_SEND;
+				else
+					flags = PURPLE_MESSAGE_RECV;
+				serv_got_im(sa->pc, json_object_get_string_member(message, "steamid_from"), html, flags, time(NULL));
 				g_free(html);
 				g_free(text);
 			}
@@ -211,7 +216,7 @@ steam_get_friend_list_cb(SteamAccount *sa, JsonObject *obj, gpointer user_data)
 {
 	JsonArray *friends = json_object_get_array_member(obj, "friends");
 	PurpleGroup *group = NULL;
-	gchar *users_to_fetch = "", *temp;
+	gchar *users_to_fetch = g_strdup(""), *temp;
 	guint index;
 	
 	for(index = 0; index < json_array_get_length(friends); index++)
