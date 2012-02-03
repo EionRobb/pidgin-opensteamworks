@@ -76,6 +76,7 @@ struct _SteamAccount {
 	GHashTable *hostname_ip_cache;
 	
 	GHashTable *sent_messages_hash;
+	guint poll_timeout;
 	
 	gchar *umqid;
 	guint message;
