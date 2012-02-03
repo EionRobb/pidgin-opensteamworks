@@ -31,6 +31,73 @@ steam_personastate_to_statustype(gint64 state)
 	return status_id;
 }
 
+static void steam_fetch_new_sessionid(SteamAccount *sa);
+
+static void
+steam_friend_action(SteamAccount *sa, const gchar *who, const gchar *action)
+{
+	//Possible actions: add, remove
+	GString *postdata = g_string_new(NULL);
+	const gchar *url;
+
+	if (g_str_equal(action, "remove"))
+		url = "/actions/RemoveFriendAjax";
+	else
+		url = "/actions/AddFriendAjax";
+	
+	g_string_append_printf(postdata, "steamid=%s&", purple_url_encode(who));
+	g_string_append_printf(postdata, "sessionID=%s", purple_url_encode(sa->sessionid));
+	
+	steam_post_or_get(sa, STEAM_METHOD_POST | STEAM_METHOD_SSL, "steamcommunity.com", url, postdata->str, NULL, NULL, FALSE);
+	
+	g_string_free(postdata, TRUE);
+}
+
+static void
+steam_friend_invite_action(SteamAccount *sa, const gchar *who, const gchar *action)
+{
+	//Possible actions:  accept, ignore, block
+	GString *postdata = g_string_new(NULL);
+	gchar *url = g_strdup_printf("/profiles/%s/home_process", purple_url_encode(who));
+	
+	g_string_append(postdata, "action=approvePending&");
+	g_string_append(postdata, "itype=friend&");
+	g_string_append_printf(postdata, "perform=%s&", purple_url_encode(action));
+	g_string_append_printf(postdata, "sessionID=%s&", purple_url_encode(sa->sessionid));
+	g_string_append_printf(postdata, "id=%s", purple_url_encode(who));
+	
+	steam_post_or_get(sa, STEAM_METHOD_POST | STEAM_METHOD_SSL, "steamcommunity.com", url, postdata->str, NULL, NULL, FALSE);
+	
+	g_free(url);
+	g_string_free(postdata, TRUE);
+}
+
+static void
+steam_fetch_new_sessionid_cb(SteamAccount *sa, JsonObject *obj, gpointer user_data)
+{
+	if (g_hash_table_lookup(sa->cookie_table, "sessionid"))
+	{
+		g_free(sa->sessionid);
+		sa->sessionid = g_strdup(g_hash_table_lookup(sa->cookie_table, "sessionid"));
+	}
+}
+
+static void
+steam_fetch_new_sessionid(SteamAccount *sa)
+{
+	gchar *steamLogin;
+	
+	steamLogin = g_strconcat(sa->steamid, "||oauth:", purple_account_get_string(sa->account, "access_token", ""), NULL);
+	
+	g_hash_table_replace(sa->cookie_table, g_strdup("forceMobile"), g_strdup("1"));
+	g_hash_table_replace(sa->cookie_table, g_strdup("mobileClient"), g_strdup("ios"));
+	g_hash_table_replace(sa->cookie_table, g_strdup("mobileClientVersion"), g_strdup("1291812"));
+	g_hash_table_replace(sa->cookie_table, g_strdup("Steam_Language"), g_strdup("english"));
+	g_hash_table_replace(sa->cookie_table, g_strdup("steamLogin"), steamLogin);
+	
+	steam_post_or_get(sa, STEAM_METHOD_GET | STEAM_METHOD_SSL, "steamcommunity.com", "/mobilesettings/GetManifest/v0001", NULL, steam_fetch_new_sessionid_cb, NULL, FALSE);
+}
+
 static void
 steam_get_icon_cb(PurpleUtilFetchUrlData *url_data, gpointer user_data, const gchar *url_text, gsize len, const gchar *error_message)
 {
@@ -72,6 +139,32 @@ gboolean steam_timeout(gpointer userdata)
 	SteamAccount *sa = userdata;
 	steam_poll(sa, FALSE, sa->message);
 	return FALSE;
+}
+
+static void
+steam_auth_accept_cb(gpointer user_data)
+{
+	PurpleBuddy *temp_buddy = user_data;
+	PurpleAccount *account = purple_buddy_get_account(temp_buddy);
+	PurpleConnection *pc = purple_account_get_connection(account);
+	SteamAccount *sa = pc->proto_data;
+	
+	steam_friend_invite_action(sa, temp_buddy->name, "accept");
+	
+	purple_buddy_destroy(temp_buddy);
+}
+
+static void
+steam_auth_reject_cb(gpointer user_data)
+{
+	PurpleBuddy *temp_buddy = user_data;
+	PurpleAccount *account = purple_buddy_get_account(temp_buddy);
+	PurpleConnection *pc = purple_account_get_connection(account);
+	SteamAccount *sa = pc->proto_data;
+	
+	steam_friend_invite_action(sa, temp_buddy->name, "ignore");
+	
+	purple_buddy_destroy(temp_buddy);
 }
 
 static void
@@ -126,8 +219,15 @@ steam_poll_cb(SteamAccount *sa, JsonObject *obj, gpointer user_data)
 		} else if (g_str_equal(type, "personarelationship"))
 		{
 			const gchar *steamid = json_object_get_string_member(message, "steamid_from");
-			if (json_object_get_int_member(message, "persona_state") == 0)
+			gint64 persona_state = json_object_get_int_member(message, "persona_state");
+			if (persona_state == 0)
 				purple_blist_remove_buddy(purple_find_buddy(sa->account, steamid));
+			else if (persona_state == 2)
+				purple_account_request_authorization(
+					sa->account, steamid, NULL,
+					NULL, NULL, FALSE,
+					steam_auth_accept_cb, steam_auth_reject_cb, purple_buddy_new(sa->account, steamid, NULL));
+			
 		} else if (g_str_equal(type, "leftconversation"))
 		{
 			const gchar *steamid = json_object_get_string_member(message, "steamid_from");
@@ -223,7 +323,8 @@ steam_get_friend_list_cb(SteamAccount *sa, JsonObject *obj, gpointer user_data)
 	{
 		JsonObject *friend = json_array_get_object_element(friends, index);
 		const gchar *steamid = json_object_get_string_member(friend, "steamid");
-		if (g_str_equal(json_object_get_string_member(friend, "relationship"), "friend"))
+		const gchar *relationship = json_object_get_string_member(friend, "relationship");
+		if (g_str_equal(relationship, "friend"))
 		{
 			if (!purple_find_buddy(sa->account, steamid))
 			{
@@ -241,6 +342,12 @@ steam_get_friend_list_cb(SteamAccount *sa, JsonObject *obj, gpointer user_data)
 			temp = users_to_fetch;
 			users_to_fetch = g_strconcat(users_to_fetch, ",", steamid, NULL);
 			g_free(temp);
+		} else if (g_str_equal(relationship, "requestrecipient"))
+		{
+			purple_account_request_authorization(
+					sa->account, steamid, NULL,
+					NULL, NULL, FALSE,
+					steam_auth_accept_cb, steam_auth_reject_cb, purple_buddy_new(sa->account, steamid, NULL));
 		}
 	}
 	
@@ -366,6 +473,8 @@ steam_login_access_token_cb(SteamAccount *sa, JsonObject *obj, gpointer user_dat
 	
 	steam_get_friend_list(sa);
 	steam_poll(sa, FALSE, 0);
+	
+	steam_fetch_new_sessionid(sa);
 }
 
 static void
@@ -601,6 +710,28 @@ static void steam_buddy_free(PurpleBuddy *buddy)
 	}
 }
 
+void
+steam_fake_group_buddy(PurpleConnection *pc, const char *who, const char *old_group, const char *new_group)
+{
+	// Do nothing to stop the remove+add behaviour
+}
+
+void
+steam_add_buddy(PurpleConnection *pc, PurpleBuddy *buddy, PurpleGroup *group)
+{
+	SteamAccount *sa = pc->proto_data;
+	
+	steam_friend_action(sa, buddy->name, "add");
+}
+
+void
+steam_buddy_remove(PurpleConnection *pc, PurpleBuddy *buddy, PurpleGroup *group)
+{
+	SteamAccount *sa = pc->proto_data;
+	
+	steam_friend_action(sa, buddy->name, "remove");
+}
+
 /******************************************************************************/
 /* Plugin functions */
 /******************************************************************************/
@@ -683,9 +814,9 @@ static PurplePluginProtocolInfo prpl_info = {
 	steam_set_status,          /* set_status */
 	NULL,//steam_set_idle,            /* set_idle */
 	NULL,                   /* change_passwd */
-	NULL,//steam_add_buddy,           /* add_buddy */
+	steam_add_buddy,           /* add_buddy */
 	NULL,                   /* add_buddies */
-	NULL,//steam_buddy_remove,        /* remove_buddy */
+	steam_buddy_remove,        /* remove_buddy */
 	NULL,                   /* remove_buddies */
 	NULL,                   /* add_permit */
 	NULL,                   /* add_deny */
@@ -704,7 +835,7 @@ static PurplePluginProtocolInfo prpl_info = {
 	NULL,                   /* get_cb_info */
 	NULL,                   /* get_cb_away */
 	NULL,                   /* alias_buddy */
-	NULL,//steam_group_buddy_move,    /* group_buddy */
+	steam_fake_group_buddy,    /* group_buddy */
 	NULL,//steam_group_rename,        /* rename_group */
 	steam_buddy_free,          /* buddy_free */
 	NULL,//steam_conversation_closed, /* convo_closed */

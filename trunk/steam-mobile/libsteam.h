@@ -80,6 +80,7 @@ struct _SteamAccount {
 	gchar *umqid;
 	guint message;
 	gchar *steamid;
+	gchar *sessionid;
 };
 
 struct _SteamBuddy {
