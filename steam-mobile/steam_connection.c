@@ -516,7 +516,9 @@ void steam_post_or_get(SteamAccount *sa, SteamMethod method,
 				"Content-length: %zu\r\n", strlen(postdata));
 	}
 	g_string_append_printf(request, "Accept: */*\r\n");
-	g_string_append_printf(request, "Cookie: %s\r\n", cookies);
+	//Only use cookies for steamcommunity.com
+	if (g_str_equal(host, "steamcommunity.com"))
+		g_string_append_printf(request, "Cookie: %s\r\n", cookies);
 	g_string_append_printf(request, "Accept-Encoding: gzip\r\n");
 	if (is_proxy == TRUE)
 	{
