@@ -240,7 +240,7 @@ steam_poll_cb(SteamAccount *sa, JsonObject *obj, gpointer user_data)
 	
 	if (!secure)
 	{
-		purple_timeout_add_seconds(1, steam_timeout, sa);
+		sa->poll_timeout = purple_timeout_add_seconds(1, steam_timeout, sa);
 	}
 }
 
@@ -568,6 +568,8 @@ static void steam_close(PurpleConnection *pc)
 	g_return_if_fail(pc->proto_data != NULL);
 	
 	sa = pc->proto_data;
+	
+	purple_timeout_remove(sa->poll_timeout);
 	
 	purple_debug_info("steam", "destroying %d waiting connections\n",
 					  g_queue_get_length(sa->waiting_conns));
