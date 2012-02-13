@@ -167,6 +167,149 @@ steam_auth_reject_cb(gpointer user_data)
 	purple_buddy_destroy(temp_buddy);
 }
 
+void
+steam_search_results_add_buddy(PurpleConnection *pc, GList *row, void *user_data)
+{
+	PurpleAccount *account = purple_connection_get_account(pc);
+
+	if (!purple_find_buddy(account, g_list_nth_data(row, 0)))
+		purple_blist_request_add_buddy(account, g_list_nth_data(row, 0), "Steam", g_list_nth_data(row, 1));
+}
+
+void
+steam_search_display_results(SteamAccount *sa, JsonObject *obj, gpointer user_data)
+{
+	PurpleNotifySearchResults *results;
+	PurpleNotifySearchColumn *column;
+	JsonArray *players = NULL;
+	guint index;
+	gchar *search_term = user_data;
+	
+	if (!json_object_has_member(obj, "players"))
+	{
+		g_free(search_term);
+		return;
+	}
+	
+	results = purple_notify_searchresults_new();
+	if (results == NULL)
+	{
+		g_free(search_term);
+		return;
+	}
+		
+	/* columns: Friend ID, Name, Network */
+	column = purple_notify_searchresults_column_new(_("ID"));
+	purple_notify_searchresults_column_add(results, column);
+	column = purple_notify_searchresults_column_new(_("Persona"));
+	purple_notify_searchresults_column_add(results, column);
+	column = purple_notify_searchresults_column_new(_("Real name"));
+	purple_notify_searchresults_column_add(results, column);
+	column = purple_notify_searchresults_column_new(_("Profile"));
+	purple_notify_searchresults_column_add(results, column);
+	
+	purple_notify_searchresults_button_add(results,
+			PURPLE_NOTIFY_BUTTON_ADD,
+			steam_search_results_add_buddy);
+	
+	players = json_object_get_array_member(obj, "players");
+	for(index = 0; index < json_array_get_length(players); index++)
+	{
+		JsonObject *player = json_array_get_object_element(players, index);
+		
+		/* the row in the search results table */
+		/* prepend to it backwards then reverse to speed up adds */
+		GList *row = NULL;
+		
+		row = g_list_prepend(row, g_strdup(json_object_get_string_member(player, "steamid")));
+		row = g_list_prepend(row, g_strdup(json_object_get_string_member(player, "personaname")));
+		row = g_list_prepend(row, g_strdup(json_object_get_string_member(player, "realname")));
+		row = g_list_prepend(row, g_strdup(json_object_get_string_member(player, "profileurl")));
+		
+		row = g_list_reverse(row);
+		
+		purple_notify_searchresults_row_add(results, row);
+	}
+	
+	purple_notify_searchresults(sa->pc, NULL, search_term, NULL,
+			results, NULL, NULL);
+}
+
+void
+steam_search_users_text_cb(SteamAccount *sa, JsonObject *obj, gpointer user_data)
+{
+	JsonArray *results = NULL;
+	guint index;
+	GString *userids;
+	gchar *search_term = user_data;
+	
+	if (json_object_get_int_member(obj, "count") == 0 ||
+		!json_object_has_member(obj, "results"))
+	{
+		g_free(search_term);
+		return;
+	}
+	
+	userids = g_string_new("");
+	
+	results = json_object_get_array_member(obj, "results");
+	for(index = 0; index < json_array_get_length(results); index++)
+	{
+		JsonObject *result = json_array_get_object_element(results, index);
+		g_string_append_printf(userids, "%s,", json_object_get_string_member(result, "steamid"));
+	}
+	
+	if (userids && userids->str && *userids->str)
+	{
+		GString *url = g_string_new("/ISteamUserOAuth/GetUserSummaries/v0001?");
+		g_string_append_printf(url, "access_token=%s&", purple_url_encode(purple_account_get_string(sa->account, "access_token", "")));
+		g_string_append_printf(url, "steamids=%s", purple_url_encode(userids->str));
+		
+		steam_post_or_get(sa, STEAM_METHOD_GET | STEAM_METHOD_SSL, NULL, url->str, NULL, steam_search_display_results, search_term, TRUE);
+		
+		g_string_free(url, TRUE);
+	} else {
+		g_free(search_term);
+	}
+	
+	g_string_free(userids, TRUE);
+}
+
+void
+steam_search_users_text(gpointer user_data, const gchar *text)
+{
+	SteamAccount *sa = user_data;
+	GString *url = g_string_new("/ISteamUserOAuth/Search/v0001?");
+	
+	g_string_append_printf(url, "access_token=%s&", purple_url_encode(purple_account_get_string(sa->account, "access_token", "")));
+	g_string_append_printf(url, "keywords=%s&", purple_url_encode(text));
+	g_string_append(url, "offset=0&");
+	g_string_append(url, "count=50&");
+	g_string_append(url, "targets=users&");
+	g_string_append(url, "fields=all&");
+	
+	steam_post_or_get(sa, STEAM_METHOD_GET | STEAM_METHOD_SSL, "api.steampowered.com", url->str, NULL, steam_search_users_text_cb, g_strdup(text), FALSE);
+	
+	g_string_free(url, TRUE);
+}
+
+void
+steam_search_users(PurplePluginAction *action)
+{
+	PurpleConnection *pc = (PurpleConnection *) action->context;
+	SteamAccount *sa = pc->proto_data;
+	
+	purple_request_input(pc, "Search for Steam Friends",
+					   "Search for Steam Friends",
+					   NULL,
+					   NULL, FALSE, FALSE, NULL,
+					   _("_Search"), G_CALLBACK(steam_search_users_text),
+					   _("_Cancel"), NULL,
+					   purple_connection_get_account(pc), NULL, NULL,
+					   sa);
+
+}
+
 static void
 steam_poll_cb(SteamAccount *sa, JsonObject *obj, gpointer user_data)
 {
@@ -753,9 +896,9 @@ static GList *steam_actions(PurplePlugin *plugin, gpointer context)
 	GList *m = NULL;
 	PurplePluginAction *act;
 
-	//act = purple_plugin_action_new(_("Search for buddies..."),
-	//		steam_search_users);
-	//m = g_list_append(m, act);
+	act = purple_plugin_action_new(_("Search for friends..."),
+			steam_search_users);
+	m = g_list_append(m, act);
 
 	return m;
 }
