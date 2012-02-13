@@ -866,7 +866,13 @@ steam_add_buddy(PurpleConnection *pc, PurpleBuddy *buddy, PurpleGroup *group)
 {
 	SteamAccount *sa = pc->proto_data;
 	
-	steam_friend_action(sa, buddy->name, "add");
+	if (g_ascii_strtoull(buddy->name, NULL, 10))
+	{
+		steam_friend_action(sa, buddy->name, "add");
+	} else {
+		purple_blist_remove_buddy(buddy);
+		purple_notify_warning(pc, "Invalid friend id", "Invalid friend id", "Friend ID's must be numeric.\nTry searching from the account menu.");
+	}
 }
 
 void
