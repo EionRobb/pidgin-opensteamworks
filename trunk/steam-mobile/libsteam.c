@@ -32,6 +32,7 @@ steam_personastate_to_statustype(gint64 state)
 }
 
 static void steam_fetch_new_sessionid(SteamAccount *sa);
+static void steam_got_friend_summaries(SteamAccount *sa, JsonObject *obj, gpointer user_data);
 
 static void
 steam_friend_action(SteamAccount *sa, const gchar *who, const gchar *action)
@@ -51,6 +52,17 @@ steam_friend_action(SteamAccount *sa, const gchar *who, const gchar *action)
 	steam_post_or_get(sa, STEAM_METHOD_POST | STEAM_METHOD_SSL, "steamcommunity.com", url, postdata->str, NULL, NULL, FALSE);
 	
 	g_string_free(postdata, TRUE);
+	
+	if (g_str_equal(action, "add"))
+	{
+		GString *infourl = g_string_new("/ISteamUserOAuth/GetUserSummaries/v0001?");
+		g_string_append_printf(infourl, "access_token=%s&", purple_url_encode(purple_account_get_string(sa->account, "access_token", "")));
+		g_string_append_printf(infourl, "steamids=%s", purple_url_encode(who));
+		
+		steam_post_or_get(sa, STEAM_METHOD_GET | STEAM_METHOD_SSL, NULL, infourl->str, NULL, steam_got_friend_summaries, NULL, TRUE);
+		
+		g_string_free(infourl, TRUE);
+	}
 }
 
 static void
@@ -368,7 +380,7 @@ steam_poll_cb(SteamAccount *sa, JsonObject *obj, gpointer user_data)
 			else if (persona_state == 2)
 				purple_account_request_authorization(
 					sa->account, steamid, NULL,
-					NULL, NULL, FALSE,
+					NULL, NULL, TRUE,
 					steam_auth_accept_cb, steam_auth_reject_cb, purple_buddy_new(sa->account, steamid, NULL));
 			
 		} else if (g_str_equal(type, "leftconversation"))
@@ -489,7 +501,7 @@ steam_get_friend_list_cb(SteamAccount *sa, JsonObject *obj, gpointer user_data)
 		{
 			purple_account_request_authorization(
 					sa->account, steamid, NULL,
-					NULL, NULL, FALSE,
+					NULL, NULL, TRUE,
 					steam_auth_accept_cb, steam_auth_reject_cb, purple_buddy_new(sa->account, steamid, NULL));
 		}
 	}
@@ -909,7 +921,27 @@ static GList *steam_actions(PurplePlugin *plugin, gpointer context)
 	return m;
 }
 
-static GList *steam_node_menu(PurpleBlistNode *node)
+void
+steam_blist_view_profile(PurpleBlistNode *node, gpointer data)
+{
+	PurpleBuddy *buddy;
+	SteamBuddy *sbuddy;
+	PurplePlugin *handle = purple_find_prpl(STEAM_PLUGIN_ID);
+	
+	if(!PURPLE_BLIST_NODE_IS_BUDDY(node))
+		return;
+	buddy = (PurpleBuddy *) node;
+	if (!buddy)
+		return;
+	sbuddy = buddy->proto_data;
+	if (!sbuddy || !sbuddy->profileurl)
+		return;
+	
+	purple_notify_uri(handle, sbuddy->profileurl);
+}
+
+static GList *
+steam_node_menu(PurpleBlistNode *node)
 {
 	GList *m = NULL;
 	PurpleMenuAction *act;
@@ -919,10 +951,10 @@ static GList *steam_node_menu(PurpleBlistNode *node)
 	{
 		buddy = (PurpleBuddy *)node;
 		
-		//act = purple_menu_action_new(_("_Poke"),
-		//		PURPLE_CALLBACK(steam_blist_poke_buddy),
-		//		NULL, NULL);
-		//m = g_list_append(m, act);
+		act = purple_menu_action_new("View online Profile",
+				PURPLE_CALLBACK(steam_blist_view_profile),
+				NULL, NULL);
+		m = g_list_append(m, act);
 	}
 	return m;
 }
