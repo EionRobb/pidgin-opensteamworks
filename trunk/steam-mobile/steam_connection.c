@@ -2,6 +2,10 @@
 
 #include "steam_connection.h"
 
+#if !PURPLE_VERSION_CHECK(3, 0, 0)
+	#define purple_connection_error purple_connection_error_reason
+#endif
+
 #if !GLIB_CHECK_VERSION (2, 22, 0)
 #define g_hostname_is_ip_address(hostname) (g_ascii_isdigit(hostname[0]) && g_strstr_len(hostname, 4, "."))
 #endif
@@ -11,7 +15,7 @@ static void steam_next_connection(SteamAccount *sa);
 
 #include <zlib.h>
 
-static gchar *steam_gunzip(const guchar *gzip_data, ssize_t *len_ptr)
+static gchar *steam_gunzip(const guchar *gzip_data, gssize *len_ptr)
 {
 	gsize gzip_data_len	= *len_ptr;
 	z_stream zstr;
@@ -145,7 +149,7 @@ static void steam_update_cookies(SteamAccount *sa, const gchar *headers)
 
 static void steam_connection_process_data(SteamConnection *steamcon)
 {
-	ssize_t len;
+	gssize len;
 	gchar *tmp;
 
 	len = steamcon->rx_len;
@@ -197,7 +201,6 @@ static void steam_connection_process_data(SteamConnection *steamcon)
 				//purple_debug_info("steam", "Got response: %s\n", tmp);
 				purple_debug_info("steam", "executing callback for %s\n", steamcon->url);
 				steamcon->callback(steamcon->sa, jsonobj, steamcon->user_data);
-				//json_node_free(root);
 			}
 			g_object_unref(parser);
 		}
@@ -217,7 +220,7 @@ static void steam_fatal_connection_cb(SteamConnection *steamcon)
 	/* We died.  Do not pass Go.  Do not collect $200 */
 	/* In all seriousness, don't attempt to call the normal callback here.
 	 * That may lead to the wrong error message being displayed */
-	purple_connection_error_reason(pc,
+	purple_connection_error(pc,
 				PURPLE_CONNECTION_ERROR_NETWORK_ERROR,
 				_("Server closed the connection."));
 
@@ -229,7 +232,7 @@ static void steam_post_or_get_readdata_cb(gpointer data, gint source,
 	SteamConnection *steamcon;
 	SteamAccount *sa;
 	gchar buf[4096];
-	ssize_t len;
+	gssize len;
 
 	steamcon = data;
 	sa = steamcon->sa;
@@ -306,7 +309,7 @@ static void steam_post_or_get_connect_cb(gpointer data, gint source,
 		const gchar *error_message)
 {
 	SteamConnection *steamcon;
-	ssize_t len;
+	gssize len;
 
 	steamcon = data;
 	steamcon->connect_data = NULL;
@@ -334,7 +337,7 @@ static void steam_post_or_get_ssl_connect_cb(gpointer data,
 		PurpleSslConnection *ssl, PurpleInputCondition cond)
 {
 	SteamConnection *steamcon;
-	ssize_t len;
+	gssize len;
 
 	steamcon = data;
 
@@ -657,7 +660,11 @@ static void steam_attempt_connection(SteamConnection *steamcon)
 			host_lookup_list = g_slist_prepend(
 					host_lookup_list, sa);
 
-			query = purple_dnsquery_a(steamcon->hostname, 80,
+			query = purple_dnsquery_a(
+#if PURPLE_VERSION_CHECK(3, 0, 0)
+					steamcon->sa->account,
+#endif
+					steamcon->hostname, 80,
 					steam_host_lookup_cb, host_lookup_list);
 			sa->dns_queries = g_slist_prepend(sa->dns_queries, query);
 			host_lookup_list = g_slist_append(host_lookup_list, query);

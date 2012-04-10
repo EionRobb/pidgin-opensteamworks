@@ -12,7 +12,9 @@
 #include <string.h>
 #include <glib/gi18n.h>
 #include <sys/types.h>
-#include <unistd.h>
+#ifdef __GNUC__
+	#include <unistd.h>
+#endif
 
 #ifndef G_GNUC_NULL_TERMINATED
 #	if __GNUC__ >= 4
