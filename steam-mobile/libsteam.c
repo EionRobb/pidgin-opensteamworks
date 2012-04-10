@@ -3,6 +3,11 @@
 #include "libsteam.h"
 #include "steam_connection.h"
 
+#if !PURPLE_VERSION_CHECK(3, 0, 0)
+	#define purple_connection_error purple_connection_error_reason
+	#define purple_notify_user_info_add_pair_html purple_notify_user_info_add_pair
+#endif
+
 static const gchar *
 steam_personastate_to_statustype(gint64 state)
 {
@@ -142,7 +147,11 @@ steam_get_icon(PurpleBuddy *buddy)
 	if (!sbuddy->avatar || (old_avatar && g_str_equal(sbuddy->avatar, old_avatar)))
 		return;
 	
+#if PURPLE_VERSION_CHECK(3, 0, 0)
+	purple_util_fetch_url_request(buddy->account, sbuddy->avatar, TRUE, NULL, FALSE, NULL, FALSE, -1, steam_get_icon_cb, buddy);
+#else
 	purple_util_fetch_url_request(sbuddy->avatar, TRUE, NULL, FALSE, NULL, FALSE, steam_get_icon_cb, buddy);
+#endif
 }
 
 static void steam_poll(SteamAccount *sa, gboolean secure, guint message);
@@ -348,7 +357,7 @@ steam_poll_cb(SteamAccount *sa, JsonObject *obj, gpointer user_data)
 				steam_poll(sa, TRUE, (guint) json_object_get_int_member(message, "secure_message_id"));
 				sa->message = MAX(sa->message, (guint) json_object_get_int_member(obj, "secure_message_id"));
 			} else {
-				gchar *text;
+				gchar *text, *html;
 				PurpleMessageFlags flags;
 				if (g_str_equal(type, "emote") || g_str_equal(type, "my_emote"))
 				{
@@ -356,7 +365,7 @@ steam_poll_cb(SteamAccount *sa, JsonObject *obj, gpointer user_data)
 				} else {
 					text = g_strdup(json_object_get_string_member(message, "text"));
 				}
-				gchar *html = purple_strdup_withhtml(text);
+				html = purple_strdup_withhtml(text);
 				if (g_str_has_prefix(type, "my_"))
 					flags = PURPLE_MESSAGE_SEND;
 				else
@@ -404,6 +413,7 @@ steam_poll(SteamAccount *sa, gboolean secure, guint message)
 {
 	GString *post = g_string_new(NULL);
 	SteamMethod method = STEAM_METHOD_POST;
+	const gchar *url = NULL;
 	
 	if (secure == TRUE)
 	{
@@ -415,7 +425,7 @@ steam_poll(SteamAccount *sa, gboolean secure, guint message)
 	g_string_append_printf(post, "umqid=%s&", purple_url_encode(sa->umqid));
 	g_string_append_printf(post, "message=%u", message?message:sa->message);
 	
-	const gchar *url = "/ISteamWebUserPresenceOAuth/PollStatus/v0001";
+	url = "/ISteamWebUserPresenceOAuth/PollStatus/v0001";
 	if (secure == TRUE)
 		url = "/ISteamWebUserPresenceOAuth/Poll/v0001";
 	steam_post_or_get(sa, method, NULL, url, post->str, steam_poll_cb, GINT_TO_POINTER(secure?1:0), TRUE);
@@ -435,6 +445,7 @@ steam_got_friend_summaries(SteamAccount *sa, JsonObject *obj, gpointer user_data
 	{
 		JsonObject *player = json_array_get_object_element(players, index);
 		const gchar *steamid = json_object_get_string_member(player, "steamid");
+		gint64 personastate = -1;
 		buddy = purple_find_buddy(sa->account, steamid);
 		if (!buddy)
 			continue;
@@ -459,7 +470,7 @@ steam_got_friend_summaries(SteamAccount *sa, JsonObject *obj, gpointer user_data
 		
 		sbuddy->lastlogoff = (guint) json_object_get_int_member(player, "lastlogoff");
 		
-		gint64 personastate = json_object_get_int_member(player, "personastate");
+		personastate = json_object_get_int_member(player, "personastate");
 		purple_prpl_got_user_status(sa->account, steamid, steam_personastate_to_statustype(personastate), NULL);
 		
 		steam_get_icon(buddy);
@@ -561,10 +572,10 @@ steam_tooltip_text(PurpleBuddy *buddy, PurpleNotifyUserInfo *user_info, gboolean
 	
 	if (sbuddy)
 	{
-		purple_notify_user_info_add_pair(user_info, "Name", sbuddy->personaname);
-		purple_notify_user_info_add_pair(user_info, "Real Name", sbuddy->realname);
+		purple_notify_user_info_add_pair_html(user_info, "Name", sbuddy->personaname);
+		purple_notify_user_info_add_pair_html(user_info, "Real Name", sbuddy->realname);
 		if (sbuddy->gameextrainfo)
-			purple_notify_user_info_add_pair(user_info, "In game", sbuddy->gameextrainfo);
+			purple_notify_user_info_add_pair_html(user_info, "In game", sbuddy->gameextrainfo);
 	}
 }
 
@@ -608,7 +619,7 @@ steam_login_access_token_cb(SteamAccount *sa, JsonObject *obj, gpointer user_dat
 {
 	if (!g_str_equal(json_object_get_string_member(obj, "error"), "OK"))
 	{
-		purple_connection_error_reason(sa->pc, PURPLE_CONNECTION_ERROR_AUTHENTICATION_FAILED, _("Bad username/password or Steam Guard Code required"));
+		purple_connection_error(sa->pc, PURPLE_CONNECTION_ERROR_AUTHENTICATION_FAILED, _("Bad username/password or Steam Guard Code required"));
 		return;
 	}
 
@@ -664,7 +675,7 @@ steam_login_cb(SteamAccount *sa, JsonObject *obj, gpointer user_data)
 						G_CALLBACK(steam_set_steam_guard_token_cb), _("Cancel"),
 						NULL, sa->account, NULL, NULL, sa->account);
 		}
-		purple_connection_error_reason(sa->pc, PURPLE_CONNECTION_ERROR_AUTHENTICATION_FAILED, _("Bad username/password or Steam Guard Code required"));
+		purple_connection_error(sa->pc, PURPLE_CONNECTION_ERROR_AUTHENTICATION_FAILED, _("Bad username/password or Steam Guard Code required"));
 	} else {
 		purple_account_set_string(sa->account, "access_token", json_object_get_string_member(obj, "access_token"));
 		steam_login_with_access_token(sa);
@@ -680,9 +691,9 @@ steam_login(PurpleAccount *account)
 	pc->proto_data = sa;
 	
 	if (!purple_ssl_is_supported()) {
-		purple_connection_error_reason (pc,
-										PURPLE_CONNECTION_ERROR_NO_SSL_SUPPORT,
-										_("Server requires TLS/SSL for login.  No TLS/SSL support found."));
+		purple_connection_error (pc,
+								PURPLE_CONNECTION_ERROR_NO_SSL_SUPPORT,
+								_("Server requires TLS/SSL for login.  No TLS/SSL support found."));
 		return;
 	}
 	
@@ -784,6 +795,7 @@ steam_set_status(PurpleAccount *account, PurpleStatus *status)
 	SteamAccount *sa = pc->proto_data;
 	PurpleStatusPrimitive prim = purple_status_type_get_primitive(purple_status_get_type(status));
 	guint state_id;
+	GString *post = NULL;
 	
 	switch(prim)
 	{
@@ -805,7 +817,7 @@ steam_set_status(PurpleAccount *account, PurpleStatus *status)
 			break;
 	}
 	
-	GString *post = g_string_new(NULL);
+	post = g_string_new(NULL);
 	
 	g_string_append_printf(post, "access_token=%s&", purple_url_encode(purple_account_get_string(account, "access_token", "")));
 	g_string_append_printf(post, "umqid=%s&", purple_url_encode(sa->umqid));
@@ -874,7 +886,11 @@ steam_fake_group_buddy(PurpleConnection *pc, const char *who, const char *old_gr
 }
 
 void
+#if PURPLE_VERSION_CHECK(3, 0, 0)
+steam_add_buddy(PurpleConnection *pc, PurpleBuddy *buddy, PurpleGroup *group, const char* message)
+#else
 steam_add_buddy(PurpleConnection *pc, PurpleBuddy *buddy, PurpleGroup *group)
+#endif
 {
 	SteamAccount *sa = pc->proto_data;
 	
@@ -973,6 +989,10 @@ static void plugin_init(PurplePlugin *plugin)
 }
 
 static PurplePluginProtocolInfo prpl_info = {
+#if PURPLE_VERSION_CHECK(3, 0, 0)
+	sizeof(PurplePluginProtocolInfo),	/* struct_size */
+#endif
+
 	/* options */
 	OPT_PROTO_MAIL_CHECK,
 
@@ -1016,7 +1036,9 @@ static PurplePluginProtocolInfo prpl_info = {
 	NULL,                   /* keepalive */
 	NULL,                   /* register_user */
 	NULL,                   /* get_cb_info */
+#if !PURPLE_VERSION_CHECK(3, 0, 0)
 	NULL,                   /* get_cb_away */
+#endif
 	NULL,                   /* alias_buddy */
 	steam_fake_group_buddy,    /* group_buddy */
 	NULL,//steam_group_rename,        /* rename_group */
@@ -1041,9 +1063,16 @@ static PurplePluginProtocolInfo prpl_info = {
 	NULL,                   /* unregister_user */
 	NULL,                   /* send_attention */
 	NULL,                   /* attention_types */
-#if PURPLE_MAJOR_VERSION >= 2 && PURPLE_MINOR_VERSION >= 5
+#if (PURPLE_MAJOR_VERSION == 2 && PURPLE_MINOR_VERSION >= 5) || PURPLE_MAJOR_VERSION > 2
+#if PURPLE_MAJOR_VERSION == 2 && PURPLE_MINOR_VERSION >= 5
 	sizeof(PurplePluginProtocolInfo), /* struct_size */
-	NULL,//steam_get_account_text_table, /* get_account_text_table */
+#endif
+	NULL, /* steam_get_account_text_table, /* get_account_text_table */
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL
 #else
 	(gpointer) sizeof(PurplePluginProtocolInfo)
 #endif
@@ -1051,8 +1080,8 @@ static PurplePluginProtocolInfo prpl_info = {
 
 static PurplePluginInfo info = {
 	PURPLE_PLUGIN_MAGIC,
-	2,						/* major_version */
-	3, 						/* minor version */
+	PURPLE_MAJOR_VERSION,				/* major_version */
+	PURPLE_MINOR_VERSION, 				/* minor version */
 	PURPLE_PLUGIN_PROTOCOL, 			/* type */
 	NULL, 						/* ui_requirement */
 	0, 						/* flags */
