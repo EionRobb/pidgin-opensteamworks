@@ -395,7 +395,11 @@ steam_poll_cb(SteamAccount *sa, JsonObject *obj, gpointer user_data)
 		} else if (g_str_equal(type, "leftconversation"))
 		{
 			const gchar *steamid = json_object_get_string_member(message, "steamid_from");
-			serv_got_im(sa->pc, steamid, "/me has left the conversation", PURPLE_MESSAGE_RECV | PURPLE_MESSAGE_SYSTEM, time(NULL));
+			PurpleConversation *conv = purple_find_conversation_with_account(PURPLE_CONV_TYPE_IM, steamid, sa->account);
+			const gchar *alias = purple_buddy_get_alias(purple_find_buddy(sa->account, steamid));
+			gchar *has_left_msg = g_strdup_printf("%s has left the conversation", alias ? alias : "User");
+			purple_conversation_write(conv, "", has_left_msg, PURPLE_MESSAGE_SYSTEM, time(NULL));
+			g_free(has_left_msg);
 		}
 	}
 	
