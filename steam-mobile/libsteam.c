@@ -391,6 +391,9 @@ steam_poll_cb(SteamAccount *sa, JsonObject *obj, gpointer user_data)
 					sa->account, steamid, NULL,
 					NULL, NULL, TRUE,
 					steam_auth_accept_cb, steam_auth_reject_cb, purple_buddy_new(sa->account, steamid, NULL));
+			else if (persona_state == 3)
+				if (!purple_find_buddy(sa->account, steamid))
+					purple_blist_add_buddy(purple_buddy_new(sa->account, steamid, NULL), NULL, purple_find_group("Steam"), NULL);
 			
 		} else if (g_str_equal(type, "leftconversation"))
 		{
