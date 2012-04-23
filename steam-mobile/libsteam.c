@@ -403,6 +403,11 @@ steam_poll_cb(SteamAccount *sa, JsonObject *obj, gpointer user_data)
 	if (json_object_has_member(obj, "messagelast"))
 		sa->message = MAX(sa->message, (guint) json_object_get_int_member(obj, "messagelast"));
 	
+	if (json_object_has_member(obj, "error") && g_str_equal(json_object_get_string_member(obj, "error"), "Not Logged On"))
+	{
+		purple_connection_error(sa->pc, PURPLE_CONNECTION_ERROR_NETWORK_ERROR, _("Reconnect needed"));
+	}
+	
 	if (!secure)
 	{
 		sa->poll_timeout = purple_timeout_add_seconds(1, steam_timeout, sa);
