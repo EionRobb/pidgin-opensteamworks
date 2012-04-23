@@ -488,7 +488,7 @@ steam_get_friend_summaries(SteamAccount *sa, const gchar *who)
 {
 	GString *url;
 	
-	g_return_if_fail(!sa || !who || !*who);
+	g_return_if_fail(sa && who && *who);
 	
 	url = g_string_new("/ISteamUserOAuth/GetUserSummaries/v0001?");
 	g_string_append_printf(url, "access_token=%s&", purple_url_encode(purple_account_get_string(sa->account, "access_token", "")));
