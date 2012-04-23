@@ -225,7 +225,7 @@ steamworks_gameid_to_gamename(SteamInfo *steam, guint64 gameid)
 	{
 		purple_debug_info("steam", "One-off loading appinfo.vdf\n");
 		// steamdir/appcache/appinfo.vdf
-		appinfo_filename = g_strconcat(steam->loader->GetSteamDir().c_str(),
+		appinfo_filename = g_strconcat(steam->loader->GetSteamDir(),
 			G_DIR_SEPARATOR_S "appcache" G_DIR_SEPARATOR_S "appinfo.vdf", NULL);
 		success = g_file_get_contents(appinfo_filename, &appinfo, &appinfo_len, NULL);
 		g_free(appinfo_filename);
@@ -287,10 +287,10 @@ steamworks_eventloop(gpointer userdata)
 			gint msgLen;
 			gint messageSize = 255;
 			gchar *message = g_new0(gchar, messageSize + 1);
-			CSteamID chatFriend = chatMsg->m_ulSender;
-			if (chatMsg->m_ulSender == steam->suser->GetSteamID())
+			CSteamID chatFriend = chatMsg->m_ulSenderID;
+			if (chatMsg->m_ulSenderID == steam->suser->GetSteamID())
 			{
-				chatFriend = chatMsg->m_ulReceiver;
+				chatFriend = chatMsg->m_ulFriendID;
 				msgflags = PURPLE_MESSAGE_SEND;
 			}
 			
@@ -306,7 +306,7 @@ steamworks_eventloop(gpointer userdata)
 			}
 			
 			//Check that the message didn't come from ourselves
-			if (chatMsg->m_ulSender == steam->suser->GetSteamID() && g_hash_table_remove(steam->sent_messages_table, message))
+			if (chatMsg->m_ulSenderID == steam->suser->GetSteamID() && g_hash_table_remove(steam->sent_messages_table, message))
 			{
 				break;
 			}
@@ -471,6 +471,11 @@ steamworks_eventloop(gpointer userdata)
 			ChatRoomEnter_t *room = (ChatRoomEnter_t *)CallbackMsg.m_pubParam;
 			const gchar *friendid = steamworks_sid_to_name(room->m_ulSteamIDFriendChat);
 			serv_got_joined_chat(pc, room->m_ulSteamIDChat.GetAccountID(), friendid);
+		} break;
+		case AvatarImageLoaded_t::k_iCallback:
+		{
+			AvatarImageLoaded_t *avatar = (AvatarImageLoaded_t *)CallbackMsg.m_pubParam;
+			steamworks_load_avatar_for_user(pc->account, avatar->m_steamID);
 		} break;
 		default:
 			purple_debug_warning("steam", "unhandled event!\n");
@@ -929,7 +934,7 @@ steamworks_login(PurpleAccount *account)
 		purple_connection_error(pc, "Could not load loader\n");
 		return;
 	}
-	steam->factory = steam->loader->Load();
+	steam->factory = steam->loader->GetSteam3Factory();
 	if (!steam->factory)
 	{
 		purple_connection_error(pc, "Could not load factory\n");
