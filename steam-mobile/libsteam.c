@@ -37,7 +37,7 @@ steam_personastate_to_statustype(gint64 state)
 }
 
 static void steam_fetch_new_sessionid(SteamAccount *sa);
-static void steam_got_friend_summaries(SteamAccount *sa, JsonObject *obj, gpointer user_data);
+static void steam_get_friend_summaries(SteamAccount *sa, const gchar *who);
 
 static void
 steam_friend_action(SteamAccount *sa, const gchar *who, const gchar *action)
@@ -60,13 +60,7 @@ steam_friend_action(SteamAccount *sa, const gchar *who, const gchar *action)
 	
 	if (g_str_equal(action, "add"))
 	{
-		GString *infourl = g_string_new("/ISteamUserOAuth/GetUserSummaries/v0001?");
-		g_string_append_printf(infourl, "access_token=%s&", purple_url_encode(purple_account_get_string(sa->account, "access_token", "")));
-		g_string_append_printf(infourl, "steamids=%s", purple_url_encode(who));
-		
-		steam_post_or_get(sa, STEAM_METHOD_GET | STEAM_METHOD_SSL, NULL, infourl->str, NULL, steam_got_friend_summaries, NULL, TRUE);
-		
-		g_string_free(infourl, TRUE);
+		steam_get_friend_summaries(sa, who);
 	}
 }
 
@@ -380,6 +374,7 @@ steam_poll_cb(SteamAccount *sa, JsonObject *obj, gpointer user_data)
 			const gchar *steamid = json_object_get_string_member(message, "steamid_from");
 			purple_prpl_got_user_status(sa->account, steamid, steam_personastate_to_statustype(personastate), NULL);
 			serv_got_alias(sa->pc, steamid, json_object_get_string_member(message, "persona_name"));
+			steam_get_friend_summaries(sa, steamid);
 		} else if (g_str_equal(type, "personarelationship"))
 		{
 			const gchar *steamid = json_object_get_string_member(message, "steamid_from");
@@ -394,7 +389,6 @@ steam_poll_cb(SteamAccount *sa, JsonObject *obj, gpointer user_data)
 			else if (persona_state == 3)
 				if (!purple_find_buddy(sa->account, steamid))
 					purple_blist_add_buddy(purple_buddy_new(sa->account, steamid, NULL), NULL, purple_find_group("Steam"), NULL);
-			
 		} else if (g_str_equal(type, "leftconversation"))
 		{
 			const gchar *steamid = json_object_get_string_member(message, "steamid_from");
@@ -485,6 +479,22 @@ steam_got_friend_summaries(SteamAccount *sa, JsonObject *obj, gpointer user_data
 }
 
 static void
+steam_get_friend_summaries(SteamAccount *sa, const gchar *who)
+{
+	GString *url;
+	
+	g_return_if_fail(!sa || !who || !*who);
+	
+	url = g_string_new("/ISteamUserOAuth/GetUserSummaries/v0001?");
+	g_string_append_printf(url, "access_token=%s&", purple_url_encode(purple_account_get_string(sa->account, "access_token", "")));
+	g_string_append_printf(url, "steamids=%s", purple_url_encode(who));
+	
+	steam_post_or_get(sa, STEAM_METHOD_GET | STEAM_METHOD_SSL, NULL, url->str, NULL, steam_got_friend_summaries, NULL, TRUE);
+	
+	g_string_free(url, TRUE);
+}
+
+static void
 steam_get_friend_list_cb(SteamAccount *sa, JsonObject *obj, gpointer user_data)
 {
 	JsonArray *friends = json_object_get_array_member(obj, "friends");
@@ -526,16 +536,9 @@ steam_get_friend_list_cb(SteamAccount *sa, JsonObject *obj, gpointer user_data)
 	
 	if (users_to_fetch && *users_to_fetch)
 	{
-		GString *url = g_string_new("/ISteamUserOAuth/GetUserSummaries/v0001?");
-		g_string_append_printf(url, "access_token=%s&", purple_url_encode(purple_account_get_string(sa->account, "access_token", "")));
-		g_string_append_printf(url, "steamids=%s", purple_url_encode(users_to_fetch));
-		
-		steam_post_or_get(sa, STEAM_METHOD_GET | STEAM_METHOD_SSL, NULL, url->str, NULL, steam_got_friend_summaries, NULL, TRUE);
-		
-		g_string_free(url, TRUE);
-		
-		g_free(users_to_fetch);
+		steam_get_friend_summaries(sa, users_to_fetch);
 	}
+	g_free(users_to_fetch);
 }
 
 static void
