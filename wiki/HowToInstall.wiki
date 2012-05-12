@@ -1,0 +1,9 @@
+#summary Instructions on how to install the Steam-Mobile plugin for Windows
+#labels Featured,Phase-Deploy
+
+  * Download the latest dll from the [http://code.google.com/p/pidgin-opensteamworks/downloads/list Downloads] page
+  * Copy dll into your `Program Files (x86)\Pidgin\plugins` folder (or `Program Files\Pidgin\plugins` on 32-bit Windows)
+  * Extract [http://code.google.com/p/pidgin-opensteamworks/downloads/detail?name=icons.zip&can=2&q= the icons] into your `Program File (x86)\Pidgin\pixmaps\protocols` folder
+
+If this is the first time you have downloaded this plugin:
+  * Download [http://pidgin-opensteamworks.googlecode.com/svn/trunk/steam-mobile/libjson-glib-1.0.dll the json-glib library] into your `Program Files (x86)\Pidgin` folder (or `Program Files\Pidgin`), _not into the plugins folder_
