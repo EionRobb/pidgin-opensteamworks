@@ -430,6 +430,7 @@ steam_poll(SteamAccount *sa, gboolean secure, guint message)
 	}
 	g_string_append_printf(post, "umqid=%s&", purple_url_encode(sa->umqid));
 	g_string_append_printf(post, "message=%u", message?message:sa->message);
+	g_string_append_printf(post, "secidletime=%d", sa->idletime);
 	
 	url = "/ISteamWebUserPresenceOAuth/PollStatus/v0001";
 	if (secure == TRUE)
@@ -844,6 +845,13 @@ steam_set_status(PurpleAccount *account, PurpleStatus *status)
 	g_string_free(post, TRUE);
 }
 
+static void
+steam_set_idle(PurpleConnection *pc, int time)
+{
+	SteamAccount *sa = pc->proto_data;
+	sa->idletime = time;
+}
+
 static gint steam_send_im(PurpleConnection *pc, const gchar *who, const gchar *msg,
 		PurpleMessageFlags flags)
 {
@@ -1030,7 +1038,7 @@ static PurplePluginProtocolInfo prpl_info = {
 	steam_send_typing,         /* send_typing */
 	NULL,//steam_get_info,            /* get_info */
 	steam_set_status,          /* set_status */
-	NULL,//steam_set_idle,            /* set_idle */
+	steam_set_idle,            /* set_idle */
 	NULL,                   /* change_passwd */
 	steam_add_buddy,           /* add_buddy */
 	NULL,                   /* add_buddies */
