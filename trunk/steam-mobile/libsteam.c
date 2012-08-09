@@ -69,8 +69,10 @@ steam_friend_invite_action(SteamAccount *sa, const gchar *who, const gchar *acti
 {
 	//Possible actions:  accept, ignore, block
 	GString *postdata = g_string_new(NULL);
-	gchar *url = g_strdup_printf("/profiles/%s/home_process", purple_url_encode(who));
+	gchar *url = g_strdup_printf("/profiles/%s/home_process", purple_url_encode(sa->steamid));
 	
+	g_string_append(postdata, "json=1&");
+	g_string_append(postdata, "xml=1&");
 	g_string_append(postdata, "action=approvePending&");
 	g_string_append(postdata, "itype=friend&");
 	g_string_append_printf(postdata, "perform=%s&", purple_url_encode(action));
