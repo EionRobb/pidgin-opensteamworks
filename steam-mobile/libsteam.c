@@ -350,25 +350,32 @@ steam_poll_cb(SteamAccount *sa, JsonObject *obj, gpointer user_data)
 		{
 			if (json_object_has_member(message, "secure_message_id"))
 			{
-				steam_poll(sa, TRUE, (guint) json_object_get_int_member(message, "secure_message_id"));
-				sa->message = MAX(sa->message, (guint) json_object_get_int_member(obj, "secure_message_id"));
+				guint secure_message_id = (guint) json_object_get_int_member(message, "secure_message_id");
+				steam_poll(sa, TRUE, secure_message_id);
+				sa->message = MAX(sa->message, secure_message_id);
 			} else {
-				gchar *text, *html;
-				PurpleMessageFlags flags;
-				if (g_str_equal(type, "emote") || g_str_equal(type, "my_emote"))
+				guint new_timestamp = (guint) json_object_get_int_member(message, "timestamp");
+				if (new_timestamp > sa->last_message_timestamp)
 				{
-					text = g_strconcat("/me ", json_object_get_string_member(message, "text"), NULL);
-				} else {
-					text = g_strdup(json_object_get_string_member(message, "text"));
+					gchar *text, *html;
+					PurpleMessageFlags flags;
+					if (g_str_equal(type, "emote") || g_str_equal(type, "my_emote"))
+					{
+						text = g_strconcat("/me ", json_object_get_string_member(message, "text"), NULL);
+					} else {
+						text = g_strdup(json_object_get_string_member(message, "text"));
+					}
+					html = purple_strdup_withhtml(text);
+					if (g_str_has_prefix(type, "my_"))
+						flags = PURPLE_MESSAGE_SEND;
+					else
+						flags = PURPLE_MESSAGE_RECV;
+					serv_got_im(sa->pc, json_object_get_string_member(message, "steamid_from"), html, flags, time(NULL));
+					g_free(html);
+					g_free(text);
+					
+					sa->last_message_timestamp = new_timestamp;
 				}
-				html = purple_strdup_withhtml(text);
-				if (g_str_has_prefix(type, "my_"))
-					flags = PURPLE_MESSAGE_SEND;
-				else
-					flags = PURPLE_MESSAGE_RECV;
-				serv_got_im(sa->pc, json_object_get_string_member(message, "steamid_from"), html, flags, time(NULL));
-				g_free(html);
-				g_free(text);
 			}
 		} else if (g_str_equal(type, "personastate"))
 		{
