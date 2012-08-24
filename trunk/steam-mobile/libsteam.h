@@ -85,6 +85,7 @@ struct _SteamAccount {
 	gchar *steamid;
 	gchar *sessionid;
 	gint idletime;
+	guint last_message_timestamp;
 };
 
 struct _SteamBuddy {
