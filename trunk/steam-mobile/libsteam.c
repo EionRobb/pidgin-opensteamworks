@@ -690,20 +690,28 @@ steam_set_steam_guard_token_cb(gpointer data, const gchar *steam_guard_token)
 static void
 steam_login_cb(SteamAccount *sa, JsonObject *obj, gpointer user_data)
 {
-	if(json_object_has_member(obj, "error"))
+	if(json_object_has_member(obj, "access_token"))
 	{
-		if (g_str_equal(json_object_get_string_member(obj, "x_errorcode"), "steamguard_code_required"))
+		purple_account_set_string(sa->account, "access_token", json_object_get_string_member(obj, "access_token"));
+		steam_login_with_access_token(sa);
+	} else 
+	{
+		const gchar *x_errorcode = json_object_get_string_member(obj, "x_errorcode");
+		const gchar *error_description = json_object_get_string_member(obj, "error_description");
+		if (g_str_equal(x_errorcode, "steamguard_code_required"))
 		{
 			purple_request_input(NULL, NULL, _("Set your Steam Guard Code"),
 						_("Copy the Steam Guard Code you will have received in your email"), NULL,
 						FALSE, FALSE, "Steam Guard Code", _("OK"),
 						G_CALLBACK(steam_set_steam_guard_token_cb), _("Cancel"),
 						NULL, sa->account, NULL, NULL, sa->account);
+			purple_connection_error(sa->pc, PURPLE_CONNECTION_ERROR_AUTHENTICATION_FAILED, error_description);
+		} else if (g_str_equal(x_errorcode, "incorrect_login"))
+		{
+			purple_connection_error(sa->pc, PURPLE_CONNECTION_ERROR_AUTHENTICATION_FAILED, error_description);
+		} else {
+			purple_connection_error(sa->pc, PURPLE_CONNECTION_ERROR_NETWORK_ERROR, error_description);
 		}
-		purple_connection_error(sa->pc, PURPLE_CONNECTION_ERROR_AUTHENTICATION_FAILED, _("Bad username/password or Steam Guard Code required"));
-	} else {
-		purple_account_set_string(sa->account, "access_token", json_object_get_string_member(obj, "access_token"));
-		steam_login_with_access_token(sa);
 	}
 }
 
