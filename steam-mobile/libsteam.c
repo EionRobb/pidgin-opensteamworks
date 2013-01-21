@@ -990,10 +990,13 @@ steam_blist_view_profile(PurpleBlistNode *node, gpointer data)
 	if (!buddy)
 		return;
 	sbuddy = buddy->proto_data;
-	if (!sbuddy || !sbuddy->profileurl)
-		return;
-	
-	purple_notify_uri(handle, sbuddy->profileurl);
+	if (sbuddy && sbuddy->profileurl) {
+		purple_notify_uri(handle, sbuddy->profileurl);
+	} else {
+		gchar *profileurl = g_strdup_printf("http://steamcommunity.com/profiles/%s", buddy->name);
+		purple_notify_uri(handle, profileurl);
+		g_free(profileurl);
+	}
 }
 
 static GList *
