@@ -16,21 +16,25 @@ steam_personastate_to_statustype(gint64 state)
 	switch(state)
 	{
 		default:
-		case 0:
+		case 0: //Offline
 			prim = PURPLE_STATUS_OFFLINE; 
 			break;
-		case 1:
+		case 1: //Online
 			prim = PURPLE_STATUS_AVAILABLE;
 			break;
-		case 2:
+		case 2: //Busy
 			prim = PURPLE_STATUS_UNAVAILABLE;
 			break;
-		case 3:
+		case 3: //Away
 			prim = PURPLE_STATUS_AWAY;
 			break;
-		case 4:
+		case 4: //Snoozing
 			prim = PURPLE_STATUS_EXTENDED_AWAY;
 			break;
+		case 5: //Looking to trade
+			return "trade";
+		case 6: //Looking to play
+			return "play";
 	}
 	status_id = purple_primitive_get_id_from_type(prim);
 	return status_id;
@@ -636,6 +640,11 @@ steam_status_types(PurpleAccount *account)
 	status = purple_status_type_new_full(PURPLE_STATUS_EXTENDED_AWAY, NULL, "Snoozing", TRUE, TRUE, FALSE);
 	types = g_list_append(types, status);
 	
+	status = purple_status_type_new_full(PURPLE_STATUS_AVAILABLE, "trade", "Looking to Trade", TRUE, FALSE, FALSE);
+	types = g_list_append(types, status);
+	status = purple_status_type_new_full(PURPLE_STATUS_AVAILABLE, "play", "Looking to Play", TRUE, FALSE, FALSE);
+	types = g_list_append(types, status);
+	
 	return types;
 }
 
@@ -767,6 +776,8 @@ static void steam_close(PurpleConnection *pc)
 	g_return_if_fail(pc->proto_data != NULL);
 	
 	sa = pc->proto_data;
+	
+	// /ISteamWebUserPresenceOAuth/Logoff/v0001
 	
 	purple_timeout_remove(sa->poll_timeout);
 	
