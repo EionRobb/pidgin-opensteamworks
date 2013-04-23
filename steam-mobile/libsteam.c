@@ -771,13 +771,19 @@ steam_login(PurpleAccount *account)
 static void steam_close(PurpleConnection *pc)
 {
 	SteamAccount *sa;
+	GString *post;
 	
 	g_return_if_fail(pc != NULL);
 	g_return_if_fail(pc->proto_data != NULL);
 	
 	sa = pc->proto_data;
 	
-	// /ISteamWebUserPresenceOAuth/Logoff/v0001
+	// Go offline on the website
+	post = g_string_new(NULL);
+	g_string_append_printf(post, "access_token=%s&", purple_url_encode(purple_account_get_string(account, "access_token", "")));
+	g_string_append_printf(post, "umqid=%s&", purple_url_encode(sa->umqid));
+	steam_post_or_get(sa, STEAM_METHOD_POST | STEAM_METHOD_SSL, NULL, "/ISteamWebUserPresenceOAuth/Logoff/v0001", post->str, NULL, NULL, TRUE);
+	g_string_free(post, TRUE);
 	
 	purple_timeout_remove(sa->poll_timeout);
 	
