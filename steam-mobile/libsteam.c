@@ -442,7 +442,7 @@ steam_poll(SteamAccount *sa, gboolean secure, guint message)
 		g_string_append_printf(post, "steamid=%s&", purple_url_encode(sa->steamid));
 	}
 	g_string_append_printf(post, "umqid=%s&", purple_url_encode(sa->umqid));
-	g_string_append_printf(post, "message=%u", message?message:sa->message);
+	g_string_append_printf(post, "message=%u&", message?message:sa->message);
 	g_string_append_printf(post, "secidletime=%d", sa->idletime);
 	
 	url = "/ISteamWebUserPresenceOAuth/PollStatus/v0001";
