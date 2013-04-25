@@ -780,7 +780,7 @@ static void steam_close(PurpleConnection *pc)
 	
 	// Go offline on the website
 	post = g_string_new(NULL);
-	g_string_append_printf(post, "access_token=%s&", purple_url_encode(purple_account_get_string(account, "access_token", "")));
+	g_string_append_printf(post, "access_token=%s&", purple_url_encode(purple_account_get_string(sa->account, "access_token", "")));
 	g_string_append_printf(post, "umqid=%s&", purple_url_encode(sa->umqid));
 	steam_post_or_get(sa, STEAM_METHOD_POST | STEAM_METHOD_SSL, NULL, "/ISteamWebUserPresenceOAuth/Logoff/v0001", post->str, NULL, NULL, TRUE);
 	g_string_free(post, TRUE);
@@ -1127,7 +1127,7 @@ static PurplePluginProtocolInfo prpl_info = {
 #if PURPLE_MAJOR_VERSION == 2 && PURPLE_MINOR_VERSION >= 5
 	sizeof(PurplePluginProtocolInfo), /* struct_size */
 #endif
-	NULL, /* steam_get_account_text_table, /* get_account_text_table */
+	NULL, // steam_get_account_text_table, /* get_account_text_table */
 	NULL,
 	NULL,
 	NULL,
