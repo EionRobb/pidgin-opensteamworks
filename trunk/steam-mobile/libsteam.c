@@ -443,11 +443,13 @@ steam_poll(SteamAccount *sa, gboolean secure, guint message)
 {
 	GString *post = g_string_new(NULL);
 	SteamMethod method = STEAM_METHOD_POST;
-	const gchar *url = NULL;
+	const gchar *url = "/ISteamWebUserPresenceOAuth/PollStatus/v0001";
 	
-	if (secure == TRUE)
+	if (secure == TRUE || purple_account_get_bool(sa->account, "always_use_https", FALSE))
 	{
 		method |= STEAM_METHOD_SSL;
+		url = "/ISteamWebUserPresenceOAuth/Poll/v0001";
+		
 		g_string_append_printf(post, "access_token=%s&", purple_url_encode(purple_account_get_string(sa->account, "access_token", "")));
 	} else {
 		g_string_append_printf(post, "steamid=%s&", purple_url_encode(sa->steamid));
@@ -456,9 +458,6 @@ steam_poll(SteamAccount *sa, gboolean secure, guint message)
 	g_string_append_printf(post, "message=%u&", message?message:sa->message);
 	g_string_append_printf(post, "secidletime=%d", sa->idletime);
 	
-	url = "/ISteamWebUserPresenceOAuth/PollStatus/v0001";
-	if (secure == TRUE)
-		url = "/ISteamWebUserPresenceOAuth/Poll/v0001";
 	steam_post_or_get(sa, method, NULL, url, post->str, steam_poll_cb, GINT_TO_POINTER(secure?1:0), TRUE);
 	
 	g_string_free(post, TRUE);
@@ -1055,6 +1054,12 @@ static void plugin_init(PurplePlugin *plugin)
 	option = purple_account_option_string_new(
 		_("Steam Guard Code"),
 		"steam_guard_code", "");
+	prpl_info->protocol_options = g_list_append(
+		prpl_info->protocol_options, option);
+
+	option = purple_account_option_bool_new(
+		_("Always use HTTPS"),
+		"always_use_https", FALSE);
 	prpl_info->protocol_options = g_list_append(
 		prpl_info->protocol_options, option);
 }
