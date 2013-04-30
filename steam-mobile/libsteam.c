@@ -337,6 +337,11 @@ steam_poll_cb(SteamAccount *sa, JsonObject *obj, gpointer user_data)
 	JsonArray *messages = NULL;
 	guint index;
 	gint secure = GPOINTER_TO_INT(user_data);
+	guint server_timestamp;
+	time_t local_timestamp;
+	
+	server_timestamp = (guint) json_object_get_int_member(obj, "timestamp");
+	local_timestamp = time(NULL);
 	
 	if (json_object_has_member(obj, "messages"))
 		messages = json_object_get_array_member(obj, "messages");
@@ -362,7 +367,7 @@ steam_poll_cb(SteamAccount *sa, JsonObject *obj, gpointer user_data)
 				if (new_timestamp > sa->last_message_timestamp)
 				{
 					gchar *text, *html;
-					PurpleMessageFlags flags;
+					const gchar *from;
 					if (g_str_equal(type, "emote") || g_str_equal(type, "my_emote"))
 					{
 						text = g_strconcat("/me ", json_object_get_string_member(message, "text"), NULL);
@@ -370,11 +375,17 @@ steam_poll_cb(SteamAccount *sa, JsonObject *obj, gpointer user_data)
 						text = g_strdup(json_object_get_string_member(message, "text"));
 					}
 					html = purple_strdup_withhtml(text);
-					if (g_str_has_prefix(type, "my_"))
-						flags = PURPLE_MESSAGE_SEND;
-					else
-						flags = PURPLE_MESSAGE_RECV;
-					serv_got_im(sa->pc, json_object_get_string_member(message, "steamid_from"), html, flags, time(NULL));
+					from = json_object_get_string_member(message, "steamid_from");
+					if (g_str_has_prefix(type, "my_")) {
+						PurpleConversation *conv = purple_find_conversation_with_account(PURPLE_CONV_TYPE_IM, from, sa->account);
+						if (conv == NULL)
+						{
+							conv = purple_conversation_new(PURPLE_CONV_TYPE_IM, sa->account, from);
+						}
+						purple_conversation_write(conv, from, html, PURPLE_MESSAGE_SEND, local_timestamp - ((server_timestamp - new_timestamp) / 1000));
+					} else {
+						serv_got_im(sa->pc, from, html, PURPLE_MESSAGE_RECV, local_timestamp - ((server_timestamp - new_timestamp) / 1000));
+					}
 					g_free(html);
 					g_free(text);
 					
