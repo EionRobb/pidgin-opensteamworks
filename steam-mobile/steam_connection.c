@@ -497,7 +497,7 @@ void steam_post_or_get(SteamAccount *sa, SteamMethod method,
 	}
 
 	cookies = steam_cookies_to_string(sa);
-	user_agent = purple_account_get_string(sa->account, "user-agent", "Steam 1291812 / iPhone");
+	user_agent = purple_account_get_string(sa->account, "user-agent", "Steam 1.2.0 / iPhone");
 	
 	if (method & STEAM_METHOD_POST && !postdata)
 		postdata = "";
