@@ -709,15 +709,31 @@ steam_set_steam_guard_token_cb(gpointer data, const gchar *steam_guard_token)
 static void
 steam_login_cb(SteamAccount *sa, JsonObject *obj, gpointer user_data)
 {
-	if(json_object_has_member(obj, "access_token"))
+//{"success":true,"redirect_uri":"steammobile:\/\/mobileloginsucceeded","login_complete":true,"oauth":"{\"steamid\":\"id\",\"oauth_token\":\"oauthtoken\",\"webcookie\":\"webcookie\"}"}
+//{"success":false,"captcha_needed":false,"captcha_gid":-1,"message":"Incorrect login"}
+//{"success":false,"message":"SteamGuard","emailauth_needed":true,"emaildomain":"domain","emailsteamid":"id"}
+//{"success":false,"message":"Error verifying humanity","captcha_needed":true,"captcha_gid":"1587796635006345822"}
+	if(json_object_get_boolean_member(obj, "success"))
 	{
-		purple_account_set_string(sa->account, "access_token", json_object_get_string_member(obj, "access_token"));
-		steam_login_with_access_token(sa);
-	} else 
+		JsonParser *parser = json_parser_new();
+		const gchar *oauthjson = json_object_get_string_member(obj, "oauth");
+		
+		if (!json_parser_load_from_data(parser, oauthjson, strlen(oauthjson), NULL))
+		{
+			purple_debug_error("steam", "Error parsing response: %s\n", oauthjson);
+			purple_connection_error(sa->pc, PURPLE_CONNECTION_ERROR_NETWORK_ERROR, "JSON decoding error");
+		} else {
+			JsonNode *root = json_parser_get_root(parser);
+			JsonObject *oauthobj = json_node_get_object(root);
+			
+			purple_account_set_string(sa->account, "access_token", json_object_get_string_member(oauthobj, "oauth_token"));
+			steam_login_with_access_token(sa);
+		}
+		g_object_unref(parser);
+	} else
 	{
-		const gchar *x_errorcode = json_object_get_string_member(obj, "x_errorcode");
-		const gchar *error_description = json_object_get_string_member(obj, "error_description");
-		if (g_str_equal(x_errorcode, "steamguard_code_required"))
+		const gchar *error_description = json_object_get_string_member(obj, "message");
+		if (json_object_get_boolean_member(obj, "emailauth_needed"))
 		{
 			purple_request_input(NULL, NULL, _("Set your Steam Guard Code"),
 						_("Copy the Steam Guard Code you will have received in your email"), NULL,
@@ -725,13 +741,66 @@ steam_login_cb(SteamAccount *sa, JsonObject *obj, gpointer user_data)
 						G_CALLBACK(steam_set_steam_guard_token_cb), _("Cancel"),
 						NULL, sa->account, NULL, NULL, sa->account);
 			purple_connection_error(sa->pc, PURPLE_CONNECTION_ERROR_AUTHENTICATION_FAILED, error_description);
-		} else if (g_str_equal(x_errorcode, "incorrect_login"))
+		} else if (json_object_get_boolean_member(obj, "captcha_needed"))
+		{
+			const gchar *captcha_gid = json_object_get_string_member(obj, "captcha_gid");
+			//https://steamcommunity.com/public/captcha.php?gid=%s captcha_gid
+			//TODO
+			purple_connection_error(sa->pc, PURPLE_CONNECTION_ERROR_AUTHENTICATION_FAILED, error_description);
+		} else
 		{
 			purple_connection_error(sa->pc, PURPLE_CONNECTION_ERROR_AUTHENTICATION_FAILED, error_description);
-		} else {
-			purple_connection_error(sa->pc, PURPLE_CONNECTION_ERROR_NETWORK_ERROR, error_description);
 		}
 	}
+}
+
+#include "steam_rsa.c"
+
+static void
+steam_login_got_rsakey(SteamAccount *sa, JsonObject *obj, gpointer user_data)
+{
+	//{"success":true,"publickey_mod":"pubkeyhex","publickey_exp":"pubkeyhex","timestamp":"165685150000"}
+	GString *post = NULL;
+	gchar *encrypted_password;
+	PurpleAccount *account;
+	
+	if(!json_object_get_boolean_member(obj, "success"))
+	{
+		purple_connection_error(sa->pc, PURPLE_CONNECTION_ERROR_INVALID_USERNAME, _("Invalid username"));
+		return;
+	}
+	
+	account = sa->account;
+	encrypted_password = steam_encrypt_password(
+							json_object_get_string_member(obj, "publickey_mod"),
+							json_object_get_string_member(obj, "publickey_exp"),
+							account->password);
+	
+	purple_debug_misc("steam", "Encrypted password is %s\n", encrypted_password);
+	
+	if (!encrypted_password)
+	{
+		purple_connection_error(sa->pc,
+								PURPLE_CONNECTION_ERROR_ENCRYPTION_ERROR,
+								_("Unable to RSA encrypt the password"));
+		return;
+	}
+	
+	post = g_string_new(NULL);
+	g_string_append_printf(post, "password=%s&", purple_url_encode(encrypted_password));
+	g_string_append_printf(post, "username=%s&", purple_url_encode(account->username));
+	g_string_append_printf(post, "emailauth=%s&", purple_url_encode(purple_account_get_string(account, "steam_guard_code", "")));
+	g_string_append(post, "oauth_client_id=3638BFB1&");
+	g_string_append(post, "oauth_scope=read_profile write_profile read_client write_client&");
+	g_string_append(post, "captchagid=-1&");
+	g_string_append_printf(post, "rsatimestamp=%s", purple_url_encode(json_object_get_string_member(obj, "timestamp")));
+	
+	purple_debug_misc("steam", "Postdata: %s\n", post->str);
+	
+	steam_post_or_get(sa, STEAM_METHOD_POST | STEAM_METHOD_SSL, "steamcommunity.com", "/mobilelogin/dologin", post->str, steam_login_cb, NULL, TRUE);
+	g_string_free(post, TRUE);
+	
+	g_free(encrypted_password);
 }
 
 static void
@@ -762,16 +831,9 @@ steam_login(PurpleAccount *account)
 		steam_login_with_access_token(sa);
 	} else
 	{
-		GString *post = g_string_new(NULL);
-		g_string_append(post, "client_id=3638BFB1&");
-		g_string_append(post, "grant_type=password&");
-		g_string_append_printf(post, "username=%s&", purple_url_encode(account->username));
-		g_string_append_printf(post, "password=%s&", purple_url_encode(account->password));
-		g_string_append_printf(post, "x_emailauthcode=%s&", purple_url_encode(purple_account_get_string(account, "steam_guard_code", "")));
-		g_string_append(post, "x_webcookie=&");
-		g_string_append(post, "scope=read_profile write_profile read_client write_client");
-		steam_post_or_get(sa, STEAM_METHOD_POST | STEAM_METHOD_SSL, NULL, "/ISteamOAuth2/GetTokenWithCredentials/v0001", post->str, steam_login_cb, NULL, TRUE);
-		g_string_free(post, TRUE);
+		gchar *url = g_strdup_printf("/mobilelogin/getrsakey?username=%s", purple_url_encode(account->username));
+		steam_post_or_get(sa, STEAM_METHOD_GET | STEAM_METHOD_SSL, "steamcommunity.com", url, NULL, steam_login_got_rsakey, NULL, TRUE);
+		g_free(url);
 	}
 	
 	purple_connection_set_state(pc, PURPLE_CONNECTING);
