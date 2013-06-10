@@ -23,16 +23,15 @@ guchar *
 hexstring_to_binary(const gchar *in_string) {
 	guint in_len = strlen(in_string);
 	unsigned char *output;
-	const char *pos;
-	guint count;
+	guint pos, count;
 	guint output_len;
 	
 	output_len = in_len / 2;
-	output = g_new0(unsigned char, output_len);
+	output = g_new0(unsigned char, output_len + 10);
 	
-	pos = in_string;
+	pos = 0;
 	for(count = 0; count < output_len; count++) {
-		sscanf(pos, "%2hhx", &output[count]);
+		sscanf(&in_string[pos], "%2hhx", &output[count]);
 		pos += 2;
 	}
 	
@@ -85,14 +84,14 @@ steam_encrypt_password(const gchar *modulus_str, const gchar *exponent_str, cons
 	};
 	
 	temp = hexstring_to_binary(modulus_str);
-	inPubKey.m_modulus.data = (unsigned char *) PORT_Alloc(modlen); 
+	inPubKey.m_modulus.data = (unsigned char *) PORT_Alloc(modlen + 10); 
 	memcpy(inPubKey.m_modulus.data, temp, modlen); 
 	inPubKey.m_modulus.len = modlen; 
 	inPubKey.m_modulus.type = siUnsignedInteger; 
 	g_free(temp);
 	
 	temp = hexstring_to_binary(exponent_str);
-	inPubKey.m_exponent.data = (unsigned char *) PORT_Alloc(explen); 
+	inPubKey.m_exponent.data = (unsigned char *) PORT_Alloc(explen + 10); 
 	memcpy(inPubKey.m_exponent.data, temp, explen); 
 	inPubKey.m_exponent.len = explen;
 	inPubKey.m_exponent.type = siUnsignedInteger;
