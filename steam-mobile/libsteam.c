@@ -9,6 +9,51 @@
 #endif
 
 static const gchar *
+steam_account_get_access_token(SteamAccount *sa) {
+#ifdef TELEPATHY
+	if (sa->cached_access_token)
+		return sa->cached_access_token;
+	return "";
+#else
+	return purple_account_get_string(sa->account, "access_token", "");
+#endif
+}
+
+static void
+steam_account_set_access_token(SteamAccount *sa, const gchar *access_token) {
+#ifdef TELEPATHY
+	if (access_token != NULL) {
+		g_free(sa->cached_access_token);
+		sa->cached_access_token = g_strdup(access_token);
+		
+		gnome_keyring_store_password(GNOME_KEYRING_NETWORK_PASSWORD,
+									 GNOME_KEYRING_DEFAULT,
+									 _("Steam Mobile OAuth Token"),
+									 access_token,
+									 NULL, NULL, NULL,
+									 "user",		sa->account->username,
+									 "server",		"api.steamcommunity.com",
+									 "protocol",	"steammobile",
+									 "domain",		"libpurple",
+									 NULL);
+	} else {
+		g_free(sa->cached_access_token);
+		sa->cached_access_token = NULL;
+		
+		gnome_keyring_delete_password(GNOME_KEYRING_NETWORK_PASSWORD,
+									  NULL, NULL, NULL,
+									  "user",		sa->account->username,
+									  "server",		"api.steamcommunity.com",
+									  "protocol",	"steammobile",
+									  "domain",		"libpurple",
+									  NULL);
+	}
+#else
+	purple_account_set_string(sa->account, "access_token", access_token);
+#endif
+}
+
+static const gchar *
 steam_personastate_to_statustype(gint64 state)
 {
 	const char *status_id;
@@ -104,7 +149,7 @@ steam_fetch_new_sessionid(SteamAccount *sa)
 {
 	gchar *steamLogin;
 	
-	steamLogin = g_strconcat(sa->steamid, "||oauth:", purple_account_get_string(sa->account, "access_token", ""), NULL);
+	steamLogin = g_strconcat(sa->steamid, "||oauth:", steam_account_get_access_token(sa), NULL);
 	
 	g_hash_table_replace(sa->cookie_table, g_strdup("forceMobile"), g_strdup("1"));
 	g_hash_table_replace(sa->cookie_table, g_strdup("mobileClient"), g_strdup("ios"));
@@ -283,7 +328,7 @@ steam_search_users_text_cb(SteamAccount *sa, JsonObject *obj, gpointer user_data
 	if (userids && userids->str && *userids->str)
 	{
 		GString *url = g_string_new("/ISteamUserOAuth/GetUserSummaries/v0001?");
-		g_string_append_printf(url, "access_token=%s&", purple_url_encode(purple_account_get_string(sa->account, "access_token", "")));
+		g_string_append_printf(url, "access_token=%s&", purple_url_encode(steam_account_get_access_token(sa)));
 		g_string_append_printf(url, "steamids=%s", purple_url_encode(userids->str));
 		
 		steam_post_or_get(sa, STEAM_METHOD_GET | STEAM_METHOD_SSL, NULL, url->str, NULL, steam_search_display_results, search_term, TRUE);
@@ -302,7 +347,7 @@ steam_search_users_text(gpointer user_data, const gchar *text)
 	SteamAccount *sa = user_data;
 	GString *url = g_string_new("/ISteamUserOAuth/Search/v0001?");
 	
-	g_string_append_printf(url, "access_token=%s&", purple_url_encode(purple_account_get_string(sa->account, "access_token", "")));
+	g_string_append_printf(url, "access_token=%s&", purple_url_encode(steam_account_get_access_token(sa)));
 	g_string_append_printf(url, "keywords=%s&", purple_url_encode(text));
 	g_string_append(url, "offset=0&");
 	g_string_append(url, "count=50&");
@@ -450,7 +495,7 @@ steam_poll(SteamAccount *sa, gboolean secure, guint message)
 		method |= STEAM_METHOD_SSL;
 		url = "/ISteamWebUserPresenceOAuth/Poll/v0001";
 		
-		g_string_append_printf(post, "access_token=%s&", purple_url_encode(purple_account_get_string(sa->account, "access_token", "")));
+		g_string_append_printf(post, "access_token=%s&", purple_url_encode(steam_account_get_access_token(sa)));
 	} else {
 		g_string_append_printf(post, "steamid=%s&", purple_url_encode(sa->steamid));
 	}
@@ -515,7 +560,7 @@ steam_get_friend_summaries(SteamAccount *sa, const gchar *who)
 	g_return_if_fail(sa && who && *who);
 	
 	url = g_string_new("/ISteamUserOAuth/GetUserSummaries/v0001?");
-	g_string_append_printf(url, "access_token=%s&", purple_url_encode(purple_account_get_string(sa->account, "access_token", "")));
+	g_string_append_printf(url, "access_token=%s&", purple_url_encode(steam_account_get_access_token(sa)));
 	g_string_append_printf(url, "steamids=%s", purple_url_encode(who));
 	
 	steam_post_or_get(sa, STEAM_METHOD_GET | STEAM_METHOD_SSL, NULL, url->str, NULL, steam_got_friend_summaries, NULL, TRUE);
@@ -575,7 +620,7 @@ steam_get_friend_list(SteamAccount *sa)
 {
 	GString *url = g_string_new("/ISteamUserOAuth/GetFriendList/v0001?");
 	
-	g_string_append_printf(url, "access_token=%s&", purple_url_encode(purple_account_get_string(sa->account, "access_token", "")));
+	g_string_append_printf(url, "access_token=%s&", purple_url_encode(steam_account_get_access_token(sa)));
 	g_string_append_printf(url, "steamid=%s&", purple_url_encode(sa->steamid));
 	g_string_append(url, "relationship=friend,requestrecipient");
 	
@@ -692,7 +737,7 @@ steam_login_with_access_token(SteamAccount *sa)
 {
 	gchar *postdata;
 	
-	postdata = g_strdup_printf("access_token=%s", purple_url_encode(purple_account_get_string(sa->account, "access_token", "")));
+	postdata = g_strdup_printf("access_token=%s", purple_url_encode(steam_account_get_access_token(sa)));
 	steam_post_or_get(sa, STEAM_METHOD_POST | STEAM_METHOD_SSL, NULL, "/ISteamWebUserPresenceOAuth/Logon/v0001", postdata, steam_login_access_token_cb, NULL, TRUE);
 	g_free(postdata);
 }
@@ -726,7 +771,7 @@ steam_login_cb(SteamAccount *sa, JsonObject *obj, gpointer user_data)
 			JsonNode *root = json_parser_get_root(parser);
 			JsonObject *oauthobj = json_node_get_object(root);
 			
-			purple_account_set_string(sa->account, "access_token", json_object_get_string_member(oauthobj, "oauth_token"));
+			steam_account_set_access_token(sa, json_object_get_string_member(oauthobj, "oauth_token"));
 			steam_login_with_access_token(sa);
 		}
 		g_object_unref(parser);
@@ -803,6 +848,25 @@ steam_login_got_rsakey(SteamAccount *sa, JsonObject *obj, gpointer user_data)
 	g_free(encrypted_password);
 }
 
+#ifdef TELEPATHY
+static void
+steam_keyring_got_password(GnomeKeyringResult res, const gchar* access_token, gpointer user_data) {
+	SteamAccount *sa = user_data;
+	
+	if (access_token && *access_token)
+	{
+		sa->cached_access_token = g_strdup(password);
+	
+		steam_login_with_access_token(sa);
+	} else
+	{
+		gchar *url = g_strdup_printf("/mobilelogin/getrsakey?username=%s", purple_url_encode(sa->account->username));
+		steam_post_or_get(sa, STEAM_METHOD_GET | STEAM_METHOD_SSL, "steamcommunity.com", url, NULL, steam_login_got_rsakey, NULL, TRUE);
+		g_free(url);
+	}
+}
+#endif
+
 static void
 steam_login(PurpleAccount *account)
 {
@@ -825,7 +889,15 @@ steam_login(PurpleAccount *account)
 	sa->sent_messages_hash = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
 	sa->waiting_conns = g_queue_new();
 
-	
+#ifdef TELEPATHY
+	gnome_keyring_find_password(GNOME_KEYRING_NETWORK_PASSWORD,
+								  steam_keyring_got_password, sa, NULL,
+								  "user",		account->username,
+								  "server",		"api.steamcommunity.com",
+								  "protocol",	"steammobile",
+								  "domain",		"libpurple",
+								  NULL);
+#else
 	if (purple_account_get_string(account, "access_token", NULL))
 	{
 		steam_login_with_access_token(sa);
@@ -835,6 +907,7 @@ steam_login(PurpleAccount *account)
 		steam_post_or_get(sa, STEAM_METHOD_GET | STEAM_METHOD_SSL, "steamcommunity.com", url, NULL, steam_login_got_rsakey, NULL, TRUE);
 		g_free(url);
 	}
+#endif
 	
 	purple_connection_set_state(pc, PURPLE_CONNECTING);
 	purple_connection_update_progress(pc, _("Connecting"), 1, 3);
@@ -852,7 +925,7 @@ static void steam_close(PurpleConnection *pc)
 	
 	// Go offline on the website
 	post = g_string_new(NULL);
-	g_string_append_printf(post, "access_token=%s&", purple_url_encode(purple_account_get_string(sa->account, "access_token", "")));
+	g_string_append_printf(post, "access_token=%s&", purple_url_encode(steam_account_get_access_token(sa)));
 	g_string_append_printf(post, "umqid=%s&", purple_url_encode(sa->umqid));
 	steam_post_or_get(sa, STEAM_METHOD_POST | STEAM_METHOD_SSL, NULL, "/ISteamWebUserPresenceOAuth/Logoff/v0001", post->str, NULL, NULL, TRUE);
 	g_string_free(post, TRUE);
@@ -884,6 +957,9 @@ static void steam_close(PurpleConnection *pc)
 	g_hash_table_destroy(sa->cookie_table);
 	g_hash_table_destroy(sa->hostname_ip_cache);
 	
+#ifdef TELEPATHY
+	g_free(sa->cached_access_token);
+#endif
 	g_free(sa->umqid);
 	g_free(sa);
 }
@@ -892,12 +968,11 @@ static unsigned int
 steam_send_typing(PurpleConnection *pc, const gchar *name, PurpleTypingState state)
 {
 	SteamAccount *sa = pc->proto_data;
-	PurpleAccount *account = sa->account;
 	if (state == PURPLE_TYPING)
 	{
 		GString *post = g_string_new(NULL);
 		
-		g_string_append_printf(post, "access_token=%s&", purple_url_encode(purple_account_get_string(account, "access_token", "")));
+		g_string_append_printf(post, "access_token=%s&", purple_url_encode(steam_account_get_access_token(sa)));
 		g_string_append_printf(post, "umqid=%s&", purple_url_encode(sa->umqid));
 		g_string_append(post, "type=typing&");
 		g_string_append_printf(post, "steamid_dst=%s", name);
@@ -941,7 +1016,7 @@ steam_set_status(PurpleAccount *account, PurpleStatus *status)
 	
 	post = g_string_new(NULL);
 	
-	g_string_append_printf(post, "access_token=%s&", purple_url_encode(purple_account_get_string(account, "access_token", "")));
+	g_string_append_printf(post, "access_token=%s&", purple_url_encode(steam_account_get_access_token(sa)));
 	g_string_append_printf(post, "umqid=%s&", purple_url_encode(sa->umqid));
 	g_string_append(post, "type=personastate&");
 	g_string_append_printf(post, "persona_state=%u", state_id);
@@ -962,11 +1037,10 @@ static gint steam_send_im(PurpleConnection *pc, const gchar *who, const gchar *m
 		PurpleMessageFlags flags)
 {
 	SteamAccount *sa = pc->proto_data;
-	PurpleAccount *account = sa->account;
 	GString *post = g_string_new(NULL);
 	gchar *stripped;
 	
-	g_string_append_printf(post, "access_token=%s&", purple_url_encode(purple_account_get_string(account, "access_token", "")));
+	g_string_append_printf(post, "access_token=%s&", purple_url_encode(steam_account_get_access_token(sa)));
 	g_string_append_printf(post, "umqid=%s&", purple_url_encode(sa->umqid));
 	
 	stripped = purple_markup_strip_html(msg);

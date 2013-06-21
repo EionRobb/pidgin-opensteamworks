@@ -24,6 +24,10 @@
 #	endif /* __GNUC__ >= 4 */
 #endif /* G_GNUC_NULL_TERMINATED */
 
+#ifdef TELEPATHY
+#	include <gtk/gtk.h>
+#endif
+
 #ifdef _WIN32
 #	include "win32dep.h"
 #	define dlopen(a,b) LoadLibrary(a)
@@ -61,7 +65,7 @@
 #define FB_MAX_MSG_RETRY 2
 
 #define STEAM_PLUGIN_ID "prpl-steam-mobile"
-#define STEAM_PLUGIN_VERSION "0.1"
+#define STEAM_PLUGIN_VERSION "1.2.1"
 
 typedef struct _SteamAccount SteamAccount;
 typedef struct _SteamBuddy SteamBuddy;
@@ -86,6 +90,9 @@ struct _SteamAccount {
 	gchar *sessionid;
 	gint idletime;
 	guint last_message_timestamp;
+#ifdef TELEPATHY
+	gchar *cached_access_token;
+#endif
 };
 
 struct _SteamBuddy {
