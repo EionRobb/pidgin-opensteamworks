@@ -25,7 +25,7 @@
 #endif /* G_GNUC_NULL_TERMINATED */
 
 #ifdef TELEPATHY
-#	include <gtk/gtk.h>
+#	include <gnome-keyring.h>
 #endif
 
 #ifdef _WIN32
