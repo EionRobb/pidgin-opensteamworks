@@ -13,10 +13,10 @@ STEAM_SOURCES = \
 .PHONY:	all clean install
 all: libsteam.so
 clean:
-	rm libsteam.so
+	rm -f libsteam.so libsteam-telepathy.so
 
 libsteam.so: ${STEAM_SOURCES}
-	${COMPILER} ${LIBPURPLE_CFLAGS} ${LIBPURPLE_LIBS} -Wall -I. -g -O2 -fPIC -pipe ${STEAM_SOURCES} -o $@ -shared 
+	${COMPILER} -Wall -I. -g -O2 -fPIC -pipe ${STEAM_SOURCES} -o $@ ${LIBPURPLE_CFLAGS} ${LIBPURPLE_LIBS} -shared 
 
 libsteam-telepathy.so: ${STEAM_SOURCES}
-	${COMPILER} ${LIBPURPLE_CFLAGS} ${LIBPURPLE_LIBS} ${TELEPATHY_CFLAGS} ${TELEPATHY_LIBS} -DTELEPATHY -Wall -I. -g -O2 -fPIC -pipe ${STEAM_SOURCES} -o $@ -shared 
+	${COMPILER} -DTELEPATHY -Wall -I. -g -O2 -fPIC -pipe ${STEAM_SOURCES} -o $@ ${LIBPURPLE_CFLAGS} ${LIBPURPLE_LIBS} ${TELEPATHY_CFLAGS} ${TELEPATHY_LIBS} -shared 
