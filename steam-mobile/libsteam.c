@@ -547,7 +547,10 @@ steam_got_friend_summaries(SteamAccount *sa, JsonObject *obj, gpointer user_data
 		
 		personastate = json_object_get_int_member(player, "personastate");
 #ifdef TELEPATHY
-		purple_prpl_got_user_status(sa->account, steamid, steam_personastate_to_statustype(personastate), "message", steam_status_text(buddy), NULL);
+		if (sbuddy->gameextrainfo && *(sbuddy->gameextrainfo))
+			purple_prpl_got_user_status(sa->account, steamid, steam_personastate_to_statustype(personastate), "message", g_markup_printf_escaped("In game %s", sbuddy->gameextrainfo), NULL);
+		else
+			purple_prpl_got_user_status(sa->account, steamid, steam_personastate_to_statustype(personastate), "message", NULL, NULL);
 #else
 		purple_prpl_got_user_status(sa->account, steamid, steam_personastate_to_statustype(personastate), NULL);
 #endif
@@ -694,7 +697,7 @@ steam_status_types(PurpleAccount *account)
 
 	purple_debug_info("steam", "status_types\n");
 	
-#ifdef TELEPATHY
+#ifndef TELEPATHY
 	status = purple_status_type_new_full(PURPLE_STATUS_AVAILABLE, NULL, "Online", TRUE, TRUE, FALSE);
 	types = g_list_append(types, status);
 	status = purple_status_type_new_full(PURPLE_STATUS_OFFLINE, NULL, "Offline", TRUE, TRUE, FALSE);
