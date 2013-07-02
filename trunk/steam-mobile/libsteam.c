@@ -548,6 +548,12 @@ steam_got_friend_summaries(SteamAccount *sa, JsonObject *obj, gpointer user_data
 		personastate = json_object_get_int_member(player, "personastate");
 		purple_prpl_got_user_status(sa->account, steamid, steam_personastate_to_statustype(personastate), NULL);
 		
+		if (sbuddy->gameextrainfo && *(sbuddy->gameextrainfo)) {
+			purple_prpl_got_user_status(sa->account, steamid, "ingame", "message", sbuddy->gameextrainfo, NULL);
+		} else {
+			purple_prpl_got_user_status_deactive(sa->account, steamid, "ingame");
+		}
+		
 		steam_get_icon(buddy);
 	}
 }
@@ -698,6 +704,13 @@ steam_status_types(PurpleAccount *account)
 	status = purple_status_type_new_full(PURPLE_STATUS_AVAILABLE, "trade", "Looking to Trade", TRUE, FALSE, FALSE);
 	types = g_list_append(types, status);
 	status = purple_status_type_new_full(PURPLE_STATUS_AVAILABLE, "play", "Looking to Play", TRUE, FALSE, FALSE);
+	types = g_list_append(types, status);
+	
+	// Independent, unsettable status for being in-game
+	status = purple_status_type_new_with_attrs(PURPLE_STATUS_TUNE,
+			"ingame", NULL, FALSE, FALSE, TRUE,
+			"message", _("Game Title"), purple_value_new(PURPLE_TYPE_STRING),
+			NULL);
 	types = g_list_append(types, status);
 	
 	return types;
