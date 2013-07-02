@@ -855,7 +855,7 @@ steam_keyring_got_password(GnomeKeyringResult res, const gchar* access_token, gp
 	
 	if (access_token && *access_token)
 	{
-		sa->cached_access_token = g_strdup(password);
+		sa->cached_access_token = g_strdup(access_token);
 	
 		steam_login_with_access_token(sa);
 	} else
