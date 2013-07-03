@@ -89,28 +89,43 @@ static gchar *steam_gunzip(const guchar *gzip_data, gssize *len_ptr)
 	return g_string_free(output_string, FALSE);
 }
 
-void steam_connection_destroy(SteamConnection *steamcon)
+void
+steam_connection_close(SteamConnection *steamcon)
 {
 	steamcon->sa->conns = g_slist_remove(steamcon->sa->conns, steamcon);
-
-	if (steamcon->request != NULL)
-		g_string_free(steamcon->request, TRUE);
-
-	g_free(steamcon->rx_buf);
-
-	if (steamcon->connect_data != NULL)
+	
+	if (steamcon->connect_data != NULL) {
 		purple_proxy_connect_cancel(steamcon->connect_data);
+		steamcon->connect_data = NULL;
+	}
 
-	if (steamcon->ssl_conn != NULL)
+	if (steamcon->ssl_conn != NULL) {
 		purple_ssl_close(steamcon->ssl_conn);
+		steamcon->ssl_conn = NULL;
+	}
 
 	if (steamcon->fd >= 0) {
 		close(steamcon->fd);
+		steamcon->fd = -1;
 	}
 
-	if (steamcon->input_watcher > 0)
+	if (steamcon->input_watcher > 0) {
 		purple_input_remove(steamcon->input_watcher);
+		steamcon->input_watcher = 0;
+	}
+	
+	g_free(steamcon->rx_buf);
+	steamcon->rx_buf = NULL;
+	steamcon->rx_len = 0;
+}
 
+void steam_connection_destroy(SteamConnection *steamcon)
+{
+	steam_connection_close(steamcon);
+	
+	if (steamcon->request != NULL)
+		g_string_free(steamcon->request, TRUE);
+	
 	g_free(steamcon->url);
 	g_free(steamcon->hostname);
 	g_free(steamcon);
@@ -272,8 +287,17 @@ static void steam_post_or_get_readdata_cb(gpointer data, gint source,
 			purple_debug_warning("steam",
 				"ssl error, but data received.  attempting to continue\n");
 		} else {
-			/* TODO: Is this a regular occurrence?  If so then maybe resend the request? */
-			steam_fatal_connection_cb(steamcon);
+			/* Try resend the request */
+			steamcon->retry_count++;
+			if (steamcon->retry_count < 3) {
+				steam_connection_close(steamcon);
+				steamcon->request_time = time(NULL);
+				
+				g_queue_push_head(sa->waiting_conns, steamcon);
+				steam_next_connection(sa);
+			} else {
+				steam_fatal_connection_cb(steamcon);
+			}
 			return;
 		}
 	}
