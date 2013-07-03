@@ -114,6 +114,8 @@ steam_connection_close(SteamConnection *steamcon)
 		steamcon->input_watcher = 0;
 	}
 	
+	purple_timeout_remove(steamcon->timeout_watcher);
+	
 	g_free(steamcon->rx_buf);
 	steamcon->rx_buf = NULL;
 	steamcon->rx_len = 0;
@@ -614,6 +616,28 @@ static void steam_next_connection(SteamAccount *sa)
 	}
 }
 
+
+static gboolean
+steam_connection_timedout(gpointer userdata)
+{
+	SteamConnection *steamcon = userdata;
+	SteamAccount *sa = steamcon->sa;
+	
+	/* Try resend the request */
+	steamcon->retry_count++;
+	if (steamcon->retry_count < 3) {
+		steam_connection_close(steamcon);
+		steamcon->request_time = time(NULL);
+		
+		g_queue_push_head(sa->waiting_conns, steamcon);
+		steam_next_connection(sa);
+	} else {
+		steam_fatal_connection_cb(steamcon);
+	}
+	
+	return FALSE;
+}
+
 static void steam_attempt_connection(SteamConnection *steamcon)
 {
 	gboolean is_proxy = FALSE;
@@ -703,6 +727,8 @@ static void steam_attempt_connection(SteamConnection *steamcon)
 		steamcon->connect_data = purple_proxy_connect(NULL, sa->account,
 				steamcon->hostname, 80, steam_post_or_get_connect_cb, steamcon);
 	}
+	
+	steamcon->timeout_watcher = purple_timeout_add_seconds(120, steam_connection_timedout, steamcon);
 
 	return;
 }
