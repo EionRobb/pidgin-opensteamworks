@@ -312,6 +312,9 @@ steam_search_users_text_cb(SteamAccount *sa, JsonObject *obj, gpointer user_data
 	if (json_object_get_int_member(obj, "count") == 0 ||
 		!json_object_has_member(obj, "results"))
 	{
+		gchar *primary_text = g_strdup_printf("Your search for the user \"%s\" returned no results", search_term);
+		purple_notify_warning(sa->pc, "No users found", primary_text, "");
+		g_free(primary_text);
 		g_free(search_term);
 		return;
 	}
