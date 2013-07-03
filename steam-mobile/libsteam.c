@@ -384,6 +384,7 @@ steam_poll_cb(SteamAccount *sa, JsonObject *obj, gpointer user_data)
 	gint secure = GPOINTER_TO_INT(user_data);
 	guint server_timestamp;
 	time_t local_timestamp;
+	GString *users_to_update = g_string_new(NULL);
 	
 	server_timestamp = (guint) json_object_get_int_member(obj, "timestamp");
 	local_timestamp = time(NULL);
@@ -443,7 +444,9 @@ steam_poll_cb(SteamAccount *sa, JsonObject *obj, gpointer user_data)
 			const gchar *steamid = json_object_get_string_member(message, "steamid_from");
 			purple_prpl_got_user_status(sa->account, steamid, steam_personastate_to_statustype(personastate), NULL);
 			serv_got_alias(sa->pc, steamid, json_object_get_string_member(message, "persona_name"));
-			steam_get_friend_summaries(sa, steamid);
+			
+			g_string_append_c(users_to_update, ',');
+			g_string_append(users_to_update, steamid);
 		} else if (g_str_equal(type, "personarelationship"))
 		{
 			const gchar *steamid = json_object_get_string_member(message, "steamid_from");
@@ -481,6 +484,12 @@ steam_poll_cb(SteamAccount *sa, JsonObject *obj, gpointer user_data)
 	{
 		sa->poll_timeout = purple_timeout_add_seconds(1, steam_timeout, sa);
 	}
+	
+	if (users_to_update && users_to_update->len) {
+		steam_get_friend_summaries(sa, users_to_update->str);
+	}
+	g_string_free(users_to_update, TRUE);
+			
 }
 
 static void
