@@ -33,9 +33,12 @@ struct _SteamConnection {
 	guint input_watcher;
 	gboolean connection_keepalive;
 	time_t request_time;
+	guint retry_count;
+	guint timeout_watcher;
 };
 
 void steam_connection_destroy(SteamConnection *steamcon);
+void steam_connection_close(SteamConnection *steamcon);
 void steam_post_or_get(SteamAccount *sa, SteamMethod method,
 		const gchar *host, const gchar *url, const gchar *postdata,
 		SteamProxyCallbackFunc callback_func, gpointer user_data,
