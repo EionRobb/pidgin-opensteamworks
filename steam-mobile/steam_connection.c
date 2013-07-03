@@ -469,11 +469,23 @@ static void steam_ssl_connection_error(PurpleSslConnection *ssl,
 		PurpleSslErrorType errortype, gpointer data)
 {
 	SteamConnection *steamcon = data;
-	PurpleConnection *pc = steamcon->sa->pc;
-
+	SteamAccount *sa = steamcon->sa;
+	PurpleConnection *pc = sa->pc;
+	
 	steamcon->ssl_conn = NULL;
-	steam_connection_destroy(steamcon);
-	purple_connection_ssl_error(pc, errortype);
+	
+	/* Try resend the request */
+	steamcon->retry_count++;
+	if (steamcon->retry_count < 3) {
+		steam_connection_close(steamcon);
+		steamcon->request_time = time(NULL);
+		
+		g_queue_push_head(sa->waiting_conns, steamcon);
+		steam_next_connection(sa);
+	} else {
+		steam_connection_destroy(steamcon);
+		purple_connection_ssl_error(pc, errortype);
+	}
 }
 
 void steam_post_or_get(SteamAccount *sa, SteamMethod method,
