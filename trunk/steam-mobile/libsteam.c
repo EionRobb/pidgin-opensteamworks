@@ -3,6 +3,26 @@
 #include "libsteam.h"
 #include "steam_connection.h"
 
+static gboolean core_is_haze = FALSE;
+
+#ifdef G_OS_UNIX
+#include <gnome-keyring.h>
+#include <dlfcn.h>
+
+extern const GnomeKeyringPasswordSchema* GNOME_KEYRING_NETWORK_PASSWORD;
+static gpointer gnome_keyring_lib = NULL;
+
+typedef gpointer (*gnome_keyring_store_password_type)(const GnomeKeyringPasswordSchema *schema, const gchar *keyring, const gchar *display_name, const gchar *password, GnomeKeyringOperationDoneCallback callback, gpointer data, GDestroyNotify destroy_data, ...);
+static gnome_keyring_store_password_type my_gnome_keyring_store_password = NULL;
+
+typedef gpointer (*gnome_keyring_delete_password_type)(const GnomeKeyringPasswordSchema *schema, GnomeKeyringOperationDoneCallback callback, gpointer data, GDestroyNotify destroy_data, ...);
+static gnome_keyring_delete_password_type my_gnome_keyring_delete_password = NULL;
+
+typedef gpointer (*gnome_keyring_find_password_type)(const GnomeKeyringPasswordSchema *schema, GnomeKeyringOperationGetStringCallback callback, gpointer data, GDestroyNotify destroy_data, ...);
+static gnome_keyring_find_password_type my_gnome_keyring_find_password = NULL;
+#endif
+
+
 #if !PURPLE_VERSION_CHECK(3, 0, 0)
 	#define purple_connection_error purple_connection_error_reason
 	#define purple_notify_user_info_add_pair_html purple_notify_user_info_add_pair
@@ -10,47 +30,57 @@
 
 static const gchar *
 steam_account_get_access_token(SteamAccount *sa) {
-#ifdef TELEPATHY
-	if (sa->cached_access_token)
-		return sa->cached_access_token;
-	return "";
-#else
-	return purple_account_get_string(sa->account, "access_token", "");
-#endif
+	if (core_is_haze) {
+		if (sa->cached_access_token)
+			return sa->cached_access_token;
+		return "";
+	} else {
+		return purple_account_get_string(sa->account, "access_token", "");
+	}
 }
+
+#ifdef G_OS_UNIX
+static void
+dummy_gnome_callback(GnomeKeyringOperationDoneCallback result, gpointer user_data) {
+	// Gnome keyring throws toys out of cots if there's no callback!
+}
+#endif
 
 static void
 steam_account_set_access_token(SteamAccount *sa, const gchar *access_token) {
-#ifdef TELEPATHY
-	if (access_token != NULL) {
-		g_free(sa->cached_access_token);
-		sa->cached_access_token = g_strdup(access_token);
-		
-		gnome_keyring_store_password(GNOME_KEYRING_NETWORK_PASSWORD,
-									 GNOME_KEYRING_DEFAULT,
-									 _("Steam Mobile OAuth Token"),
-									 access_token,
-									 NULL, NULL, NULL,
-									 "user",		sa->account->username,
-									 "server",		"api.steamcommunity.com",
-									 "protocol",	"steammobile",
-									 "domain",		"libpurple",
-									 NULL);
-	} else {
-		g_free(sa->cached_access_token);
-		sa->cached_access_token = NULL;
-		
-		gnome_keyring_delete_password(GNOME_KEYRING_NETWORK_PASSWORD,
-									  NULL, NULL, NULL,
-									  "user",		sa->account->username,
-									  "server",		"api.steamcommunity.com",
-									  "protocol",	"steammobile",
-									  "domain",		"libpurple",
-									  NULL);
+#ifdef G_OS_UNIX
+	if (core_is_haze) {
+		if (access_token != NULL) {
+			g_free(sa->cached_access_token);
+			sa->cached_access_token = g_strdup(access_token);
+			
+			my_gnome_keyring_store_password(GNOME_KEYRING_NETWORK_PASSWORD,
+											NULL,
+											_("Steam Mobile OAuth Token"),
+											access_token,
+											dummy_gnome_callback, NULL, NULL,
+											"user",		sa->account->username,
+											"server",	"api.steamcommunity.com",
+											"protocol",	"steammobile",
+											"domain",	"libpurple",
+											NULL);
+		} else {
+			g_free(sa->cached_access_token);
+			sa->cached_access_token = NULL;
+			
+			my_gnome_keyring_delete_password(GNOME_KEYRING_NETWORK_PASSWORD,
+											 dummy_gnome_callback, NULL, NULL,
+											 "user",		sa->account->username,
+											 "server",		"api.steamcommunity.com",
+											 "protocol",	"steammobile",
+											 "domain",		"libpurple",
+											 NULL);
+		}
+		return;
 	}
-#else
-	purple_account_set_string(sa->account, "access_token", access_token);
 #endif
+
+	purple_account_set_string(sa->account, "access_token", access_token);
 }
 
 static const gchar *
@@ -558,14 +588,15 @@ steam_got_friend_summaries(SteamAccount *sa, JsonObject *obj, gpointer user_data
 		sbuddy->lastlogoff = (guint) json_object_get_int_member(player, "lastlogoff");
 		
 		personastate = json_object_get_int_member(player, "personastate");
-#ifdef TELEPATHY
-		if (sbuddy->gameextrainfo && *(sbuddy->gameextrainfo))
-			purple_prpl_got_user_status(sa->account, steamid, steam_personastate_to_statustype(personastate), "message", g_markup_printf_escaped("In game %s", sbuddy->gameextrainfo), NULL);
-		else
-			purple_prpl_got_user_status(sa->account, steamid, steam_personastate_to_statustype(personastate), "message", NULL, NULL);
-#else
-		purple_prpl_got_user_status(sa->account, steamid, steam_personastate_to_statustype(personastate), NULL);
-#endif
+		if (core_is_haze) {
+			if (sbuddy->gameextrainfo && *(sbuddy->gameextrainfo)) {
+				purple_prpl_got_user_status(sa->account, steamid, steam_personastate_to_statustype(personastate), "message", g_markup_printf_escaped("In game %s", sbuddy->gameextrainfo), NULL);
+			} else {
+				purple_prpl_got_user_status(sa->account, steamid, steam_personastate_to_statustype(personastate), "message", NULL, NULL);
+			}
+		} else {
+			purple_prpl_got_user_status(sa->account, steamid, steam_personastate_to_statustype(personastate), NULL);
+		}
 		
 		if (sbuddy->gameextrainfo && *(sbuddy->gameextrainfo)) {
 			purple_prpl_got_user_status(sa->account, steamid, "ingame", "game", sbuddy->gameextrainfo, NULL);
@@ -709,48 +740,48 @@ steam_status_types(PurpleAccount *account)
 
 	purple_debug_info("steam", "status_types\n");
 	
-#ifndef TELEPATHY
-	status = purple_status_type_new_full(PURPLE_STATUS_AVAILABLE, NULL, "Online", TRUE, TRUE, FALSE);
-	types = g_list_append(types, status);
-	status = purple_status_type_new_full(PURPLE_STATUS_OFFLINE, NULL, "Offline", TRUE, TRUE, FALSE);
-	types = g_list_append(types, status);
-	status = purple_status_type_new_full(PURPLE_STATUS_UNAVAILABLE, NULL, "Busy", TRUE, TRUE, FALSE);
-	types = g_list_append(types, status);
-	status = purple_status_type_new_full(PURPLE_STATUS_AWAY, NULL, "Away", TRUE, TRUE, FALSE);
-	types = g_list_append(types, status);
-	status = purple_status_type_new_full(PURPLE_STATUS_EXTENDED_AWAY, NULL, "Snoozing", TRUE, TRUE, FALSE);
-	types = g_list_append(types, status);
-	
-	status = purple_status_type_new_full(PURPLE_STATUS_AVAILABLE, "trade", "Looking to Trade", TRUE, FALSE, FALSE);
-	types = g_list_append(types, status);
-	status = purple_status_type_new_full(PURPLE_STATUS_AVAILABLE, "play", "Looking to Play", TRUE, FALSE, FALSE);
-	types = g_list_append(types, status);
-#else
-	// Telepathy-Haze only displays status_text if the status has a "message" attr
-	
-	status = purple_status_type_new_with_attrs(PURPLE_STATUS_AVAILABLE, NULL, "Online", TRUE, TRUE, FALSE,
-					"message", "Game Title", purple_value_new(PURPLE_TYPE_STRING), NULL);
-	types = g_list_append(types, status);
-	status = purple_status_type_new_with_attrs(PURPLE_STATUS_OFFLINE, NULL, "Offline", TRUE, TRUE, FALSE,
-					"message", "Game Title", purple_value_new(PURPLE_TYPE_STRING), NULL);
-	types = g_list_append(types, status);
-	status = purple_status_type_new_with_attrs(PURPLE_STATUS_UNAVAILABLE, NULL, "Busy", TRUE, TRUE, FALSE,
-					"message", "Game Title", purple_value_new(PURPLE_TYPE_STRING), NULL);
-	types = g_list_append(types, status);
-	status = purple_status_type_new_with_attrs(PURPLE_STATUS_AWAY, NULL, "Away", TRUE, TRUE, FALSE,
-					"message", "Game Title", purple_value_new(PURPLE_TYPE_STRING), NULL);
-	types = g_list_append(types, status);
-	status = purple_status_type_new_with_attrs(PURPLE_STATUS_EXTENDED_AWAY, NULL, "Snoozing", TRUE, TRUE, FALSE,
-					"message", "Game Title", purple_value_new(PURPLE_TYPE_STRING), NULL);
-	types = g_list_append(types, status);
-	
-	status = purple_status_type_new_with_attrs(PURPLE_STATUS_AVAILABLE, "trade", "Looking to Trade", TRUE, FALSE, FALSE,
-					"message", "Game Title", purple_value_new(PURPLE_TYPE_STRING), NULL);
-	types = g_list_append(types, status);
-	status = purple_status_type_new_with_attrs(PURPLE_STATUS_AVAILABLE, "play", "Looking to Play", TRUE, FALSE, FALSE,
-					"message", "Game Title", purple_value_new(PURPLE_TYPE_STRING), NULL);
-	types = g_list_append(types, status);
-#endif
+	if (!core_is_haze) {
+		status = purple_status_type_new_full(PURPLE_STATUS_AVAILABLE, NULL, "Online", TRUE, TRUE, FALSE);
+		types = g_list_append(types, status);
+		status = purple_status_type_new_full(PURPLE_STATUS_OFFLINE, NULL, "Offline", TRUE, TRUE, FALSE);
+		types = g_list_append(types, status);
+		status = purple_status_type_new_full(PURPLE_STATUS_UNAVAILABLE, NULL, "Busy", TRUE, TRUE, FALSE);
+		types = g_list_append(types, status);
+		status = purple_status_type_new_full(PURPLE_STATUS_AWAY, NULL, "Away", TRUE, TRUE, FALSE);
+		types = g_list_append(types, status);
+		status = purple_status_type_new_full(PURPLE_STATUS_EXTENDED_AWAY, NULL, "Snoozing", TRUE, TRUE, FALSE);
+		types = g_list_append(types, status);
+		
+		status = purple_status_type_new_full(PURPLE_STATUS_AVAILABLE, "trade", "Looking to Trade", TRUE, FALSE, FALSE);
+		types = g_list_append(types, status);
+		status = purple_status_type_new_full(PURPLE_STATUS_AVAILABLE, "play", "Looking to Play", TRUE, FALSE, FALSE);
+		types = g_list_append(types, status);
+	} else {
+		// Telepathy-Haze only displays status_text if the status has a "message" attr
+		
+		status = purple_status_type_new_with_attrs(PURPLE_STATUS_AVAILABLE, NULL, "Online", TRUE, TRUE, FALSE,
+						"message", "Game Title", purple_value_new(PURPLE_TYPE_STRING), NULL);
+		types = g_list_append(types, status);
+		status = purple_status_type_new_with_attrs(PURPLE_STATUS_OFFLINE, NULL, "Offline", TRUE, TRUE, FALSE,
+						"message", "Game Title", purple_value_new(PURPLE_TYPE_STRING), NULL);
+		types = g_list_append(types, status);
+		status = purple_status_type_new_with_attrs(PURPLE_STATUS_UNAVAILABLE, NULL, "Busy", TRUE, TRUE, FALSE,
+						"message", "Game Title", purple_value_new(PURPLE_TYPE_STRING), NULL);
+		types = g_list_append(types, status);
+		status = purple_status_type_new_with_attrs(PURPLE_STATUS_AWAY, NULL, "Away", TRUE, TRUE, FALSE,
+						"message", "Game Title", purple_value_new(PURPLE_TYPE_STRING), NULL);
+		types = g_list_append(types, status);
+		status = purple_status_type_new_with_attrs(PURPLE_STATUS_EXTENDED_AWAY, NULL, "Snoozing", TRUE, TRUE, FALSE,
+						"message", "Game Title", purple_value_new(PURPLE_TYPE_STRING), NULL);
+		types = g_list_append(types, status);
+		
+		status = purple_status_type_new_with_attrs(PURPLE_STATUS_AVAILABLE, "trade", "Looking to Trade", TRUE, FALSE, FALSE,
+						"message", "Game Title", purple_value_new(PURPLE_TYPE_STRING), NULL);
+		types = g_list_append(types, status);
+		status = purple_status_type_new_with_attrs(PURPLE_STATUS_AVAILABLE, "play", "Looking to Play", TRUE, FALSE, FALSE,
+						"message", "Game Title", purple_value_new(PURPLE_TYPE_STRING), NULL);
+		types = g_list_append(types, status);
+	}
 	
 	// Independent, unsettable status for being in-game
 	status = purple_status_type_new_with_attrs(PURPLE_STATUS_TUNE,
@@ -907,7 +938,7 @@ steam_login_got_rsakey(SteamAccount *sa, JsonObject *obj, gpointer user_data)
 	g_free(encrypted_password);
 }
 
-#ifdef TELEPATHY
+#ifdef G_OS_UNIX
 static void
 steam_keyring_got_password(GnomeKeyringResult res, const gchar* access_token, gpointer user_data) {
 	SteamAccount *sa = user_data;
@@ -948,15 +979,17 @@ steam_login(PurpleAccount *account)
 	sa->sent_messages_hash = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
 	sa->waiting_conns = g_queue_new();
 
-#ifdef TELEPATHY
-	gnome_keyring_find_password(GNOME_KEYRING_NETWORK_PASSWORD,
-								  steam_keyring_got_password, sa, NULL,
-								  "user",		account->username,
-								  "server",		"api.steamcommunity.com",
-								  "protocol",	"steammobile",
-								  "domain",		"libpurple",
-								  NULL);
-#else
+#ifdef G_OS_UNIX
+	if(core_is_haze) {
+		my_gnome_keyring_find_password(GNOME_KEYRING_NETWORK_PASSWORD,
+										steam_keyring_got_password, sa, NULL,
+										"user",		account->username,
+										"server",	"api.steamcommunity.com",
+										"protocol",	"steammobile",
+										"domain",	"libpurple",
+										NULL);
+	} else
+#endif
 	if (purple_account_get_string(account, "access_token", NULL))
 	{
 		steam_login_with_access_token(sa);
@@ -966,7 +999,6 @@ steam_login(PurpleAccount *account)
 		steam_post_or_get(sa, STEAM_METHOD_GET | STEAM_METHOD_SSL, "steamcommunity.com", url, NULL, steam_login_got_rsakey, NULL, TRUE);
 		g_free(url);
 	}
-#endif
 	
 	purple_connection_set_state(pc, PURPLE_CONNECTING);
 	purple_connection_update_progress(pc, _("Connecting"), 1, 3);
@@ -1016,9 +1048,7 @@ static void steam_close(PurpleConnection *pc)
 	g_hash_table_destroy(sa->cookie_table);
 	g_hash_table_destroy(sa->hostname_ip_cache);
 	
-#ifdef TELEPATHY
 	g_free(sa->cached_access_token);
-#endif
 	g_free(sa->umqid);
 	g_free(sa);
 }
@@ -1179,11 +1209,37 @@ steam_buddy_remove(PurpleConnection *pc, PurpleBuddy *buddy, PurpleGroup *group)
 
 static gboolean plugin_load(PurplePlugin *plugin)
 {
+	core_is_haze = g_str_equal(purple_core_get_ui(), "haze");
+
+#ifdef G_OS_UNIX	
+	if (core_is_haze) {
+		gnome_keyring_lib = dlopen("libgnome-keyring.so", RTLD_LAZY);
+		if (!gnome_keyring_lib) {
+			purple_debug_error("steam", "This plugin required Gnome-Keyring when used with Telepathy-Haze\n");
+			return FALSE;
+		}
+		my_gnome_keyring_store_password = (gnome_keyring_store_password_type) dlsym(gnome_keyring_lib, "gnome_keyring_store_password");
+		my_gnome_keyring_delete_password = (gnome_keyring_delete_password_type) dlsym(gnome_keyring_lib, "gnome_keyring_delete_password");
+		my_gnome_keyring_find_password = (gnome_keyring_find_password_type) dlsym(gnome_keyring_lib, "gnome_keyring_find_password");
+		
+		if (!my_gnome_keyring_store_password || !my_gnome_keyring_delete_password || !my_gnome_keyring_find_password) {
+			dlclose(gnome_keyring_lib);
+			purple_debug_error("steam", "This plugin required Gnome-Keyring when used with Telepathy-Haze\n");
+			return FALSE;
+		}
+	}
+#endif
+	
 	return TRUE;
 }
 
 static gboolean plugin_unload(PurplePlugin *plugin)
 {
+#ifdef G_OS_UNIX
+	if (gnome_keyring_lib) {
+		dlclose(gnome_keyring_lib);
+	}
+#endif
 	return TRUE;
 }
 
