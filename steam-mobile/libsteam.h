@@ -24,10 +24,6 @@
 #	endif /* __GNUC__ >= 4 */
 #endif /* G_GNUC_NULL_TERMINATED */
 
-#ifdef TELEPATHY
-#	include <gnome-keyring.h>
-#endif
-
 #ifdef _WIN32
 #	include "win32dep.h"
 #	define dlopen(a,b) LoadLibrary(a)
@@ -49,6 +45,7 @@
 
 #include "accountopt.h"
 #include "blist.h"
+#include "core.h"
 #include "connection.h"
 #include "debug.h"
 #include "dnsquery.h"
@@ -90,9 +87,7 @@ struct _SteamAccount {
 	gchar *sessionid;
 	gint idletime;
 	guint last_message_timestamp;
-#ifdef TELEPATHY
 	gchar *cached_access_token;
-#endif
 };
 
 struct _SteamBuddy {
