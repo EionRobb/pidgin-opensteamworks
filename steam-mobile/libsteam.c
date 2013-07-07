@@ -234,6 +234,11 @@ gboolean steam_timeout(gpointer userdata)
 {
 	SteamAccount *sa = userdata;
 	steam_poll(sa, FALSE, sa->message);
+	
+	// If no response within 3 minutes, assume connection lost and try again
+	purple_timeout_remove(sa->watchdog_timeout);
+	sa->watchdog_timeout = purple_timeout_add_seconds(3 * 60, steam_timeout, sa);
+	
 	return FALSE;
 }
 
@@ -1022,6 +1027,7 @@ static void steam_close(PurpleConnection *pc)
 	g_string_free(post, TRUE);
 	
 	purple_timeout_remove(sa->poll_timeout);
+	purple_timeout_remove(sa->watchdog_timeout);
 	
 	purple_debug_info("steam", "destroying %d waiting connections\n",
 					  g_queue_get_length(sa->waiting_conns));

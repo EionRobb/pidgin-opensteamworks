@@ -88,6 +88,8 @@ struct _SteamAccount {
 	gint idletime;
 	guint last_message_timestamp;
 	gchar *cached_access_token;
+	
+	guint watchdog_timeout;
 };
 
 struct _SteamBuddy {
