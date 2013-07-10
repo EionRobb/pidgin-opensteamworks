@@ -1139,12 +1139,7 @@ static gint steam_send_im(PurpleConnection *pc, const gchar *who, const gchar *m
 	g_string_append_printf(post, "umqid=%s&", purple_url_encode(sa->umqid));
 	
 	stripped = purple_markup_strip_html(msg);
-	if (purple_message_meify(stripped, -1))
-	{
-		g_string_append(post, "type=emote&");
-	} else {
-		g_string_append(post, "type=saytext&");
-	}
+	g_string_append(post, "type=saytext&");
 	g_string_append_printf(post, "text=%s&", purple_url_encode(stripped));
 	g_string_append_printf(post, "steamid_dst=%s", who);
 	
