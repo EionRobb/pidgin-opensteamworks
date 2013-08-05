@@ -773,47 +773,28 @@ steam_status_types(PurpleAccount *account)
 
 	purple_debug_info("steam", "status_types\n");
 	
-	if (!core_is_haze) {
-		status = purple_status_type_new_full(PURPLE_STATUS_AVAILABLE, NULL, "Online", TRUE, TRUE, FALSE);
-		types = g_list_append(types, status);
-		status = purple_status_type_new_full(PURPLE_STATUS_OFFLINE, NULL, "Offline", TRUE, TRUE, FALSE);
-		types = g_list_append(types, status);
-		status = purple_status_type_new_full(PURPLE_STATUS_UNAVAILABLE, NULL, "Busy", TRUE, TRUE, FALSE);
-		types = g_list_append(types, status);
-		status = purple_status_type_new_full(PURPLE_STATUS_AWAY, NULL, "Away", TRUE, TRUE, FALSE);
-		types = g_list_append(types, status);
-		status = purple_status_type_new_full(PURPLE_STATUS_EXTENDED_AWAY, NULL, "Snoozing", TRUE, TRUE, FALSE);
-		types = g_list_append(types, status);
-		
-		status = purple_status_type_new_full(PURPLE_STATUS_AVAILABLE, "trade", "Looking to Trade", TRUE, FALSE, FALSE);
-		types = g_list_append(types, status);
-		status = purple_status_type_new_full(PURPLE_STATUS_AVAILABLE, "play", "Looking to Play", TRUE, FALSE, FALSE);
-		types = g_list_append(types, status);
-	} else {
+	status = purple_status_type_new_full(PURPLE_STATUS_AVAILABLE, NULL, "Online", TRUE, TRUE, FALSE);
+	types = g_list_append(types, status);
+	status = purple_status_type_new_full(PURPLE_STATUS_OFFLINE, NULL, "Offline", TRUE, TRUE, FALSE);
+	types = g_list_append(types, status);
+	status = purple_status_type_new_full(PURPLE_STATUS_UNAVAILABLE, NULL, "Busy", TRUE, TRUE, FALSE);
+	types = g_list_append(types, status);
+	status = purple_status_type_new_full(PURPLE_STATUS_AWAY, NULL, "Away", TRUE, TRUE, FALSE);
+	types = g_list_append(types, status);
+	status = purple_status_type_new_full(PURPLE_STATUS_EXTENDED_AWAY, NULL, "Snoozing", TRUE, TRUE, FALSE);
+	types = g_list_append(types, status);
+	
+	status = purple_status_type_new_full(PURPLE_STATUS_AVAILABLE, "trade", "Looking to Trade", TRUE, FALSE, FALSE);
+	types = g_list_append(types, status);
+	status = purple_status_type_new_full(PURPLE_STATUS_AVAILABLE, "play", "Looking to Play", TRUE, FALSE, FALSE);
+	types = g_list_append(types, status);
+	
+	if (core_is_haze) {
 		// Telepathy-Haze only displays status_text if the status has a "message" attr
-		
-		status = purple_status_type_new_with_attrs(PURPLE_STATUS_AVAILABLE, NULL, "Online", TRUE, TRUE, FALSE,
-						"message", "Game Title", purple_value_new(PURPLE_TYPE_STRING), NULL);
-		types = g_list_append(types, status);
-		status = purple_status_type_new_with_attrs(PURPLE_STATUS_OFFLINE, NULL, "Offline", TRUE, TRUE, FALSE,
-						"message", "Game Title", purple_value_new(PURPLE_TYPE_STRING), NULL);
-		types = g_list_append(types, status);
-		status = purple_status_type_new_with_attrs(PURPLE_STATUS_UNAVAILABLE, NULL, "Busy", TRUE, TRUE, FALSE,
-						"message", "Game Title", purple_value_new(PURPLE_TYPE_STRING), NULL);
-		types = g_list_append(types, status);
-		status = purple_status_type_new_with_attrs(PURPLE_STATUS_AWAY, NULL, "Away", TRUE, TRUE, FALSE,
-						"message", "Game Title", purple_value_new(PURPLE_TYPE_STRING), NULL);
-		types = g_list_append(types, status);
-		status = purple_status_type_new_with_attrs(PURPLE_STATUS_EXTENDED_AWAY, NULL, "Snoozing", TRUE, TRUE, FALSE,
-						"message", "Game Title", purple_value_new(PURPLE_TYPE_STRING), NULL);
-		types = g_list_append(types, status);
-		
-		status = purple_status_type_new_with_attrs(PURPLE_STATUS_AVAILABLE, "trade", "Looking to Trade", TRUE, FALSE, FALSE,
-						"message", "Game Title", purple_value_new(PURPLE_TYPE_STRING), NULL);
-		types = g_list_append(types, status);
-		status = purple_status_type_new_with_attrs(PURPLE_STATUS_AVAILABLE, "play", "Looking to Play", TRUE, FALSE, FALSE,
-						"message", "Game Title", purple_value_new(PURPLE_TYPE_STRING), NULL);
-		types = g_list_append(types, status);
+		GList *iter;
+		for(iter = types; iter; iter = iter->next) {
+			purple_status_type_add_attr(iter->data, "message", "Game Title", purple_value_new(PURPLE_TYPE_STRING));
+		}
 	}
 	
 	// Independent, unsettable status for being in-game
