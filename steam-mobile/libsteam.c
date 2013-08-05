@@ -568,6 +568,33 @@ steam_got_friend_summaries(SteamAccount *sa, JsonObject *obj, gpointer user_data
 		JsonObject *player = json_array_get_object_element(players, index);
 		const gchar *steamid = json_object_get_string_member(player, "steamid");
 		gint64 personastate = -1;
+		
+		if (g_str_equal(steamid, sa->steamid) && purple_account_get_bool(sa->account, "change_status_to_game", FALSE)) {
+			const gchar *gameid = json_object_get_string_member(player, "gameid");
+			const gchar *last_gameid = purple_account_get_string(sa->account, "current_gameid", NULL);
+			if (!purple_strequal(last_gameid, gameid)) {
+				PurpleSavedStatus *current_status = purple_savedstatus_get_current();
+				// We changed our in-game status
+				purple_account_set_string(sa->account, "current_gameid", gameid);
+				
+				if (!last_gameid) {
+					//Starting a game
+					purple_account_set_string(sa->account, "last_status_message", purple_savedstatus_get_message(current_status));
+				}
+				if (!gameid) {
+					//Finishing game
+					purple_savedstatus_set_message(current_status, purple_account_get_string(sa->account, "last_status_message", NULL));
+					purple_account_set_string(sa->account, "last_status_message", NULL);
+				} else {
+					//Starting or changing a game
+					gchar *new_message = g_markup_printf_escaped("In game %s", json_object_get_string_member(player, "gameextrainfo"));
+					purple_savedstatus_set_message(current_status, new_message);
+					g_free(new_message);
+				}
+				purple_savedstatus_activate(current_status);
+			}
+		}
+		
 		buddy = purple_find_buddy(sa->account, steamid);
 		if (!buddy)
 			continue;
@@ -585,6 +612,7 @@ steam_got_friend_summaries(SteamAccount *sa, JsonObject *obj, gpointer user_data
 		g_free(sbuddy->realname); sbuddy->realname = g_strdup(json_object_get_string_member(player, "realname"));
 		g_free(sbuddy->profileurl); sbuddy->profileurl = g_strdup(json_object_get_string_member(player, "profileurl"));
 		g_free(sbuddy->avatar); sbuddy->avatar = g_strdup(json_object_get_string_member(player, "avatarfull"));
+		// Optional :
 		g_free(sbuddy->gameid); sbuddy->gameid = g_strdup(json_object_get_string_member(player, "gameid"));
 		g_free(sbuddy->gameextrainfo); sbuddy->gameextrainfo = g_strdup(json_object_get_string_member(player, "gameextrainfo"));
 		g_free(sbuddy->gameserversteamid); sbuddy->gameserversteamid = g_strdup(json_object_get_string_member(player, "gameserversteamid"));
@@ -1312,6 +1340,12 @@ static void plugin_init(PurplePlugin *plugin)
 	option = purple_account_option_bool_new(
 		_("Always use HTTPS"),
 		"always_use_https", FALSE);
+	prpl_info->protocol_options = g_list_append(
+		prpl_info->protocol_options, option);
+
+	option = purple_account_option_bool_new(
+		_("Change status when in-game"),
+		"change_status_to_game", FALSE);
 	prpl_info->protocol_options = g_list_append(
 		prpl_info->protocol_options, option);
 }

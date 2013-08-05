@@ -52,6 +52,7 @@
 #include "proxy.h"
 #include "prpl.h"
 #include "request.h"
+#include "savedstatuses.h"
 #include "sslconn.h"
 #include "version.h"
 
