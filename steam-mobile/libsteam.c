@@ -9,7 +9,8 @@ static gboolean core_is_haze = FALSE;
 #include <gnome-keyring.h>
 #include <dlfcn.h>
 
-extern const GnomeKeyringPasswordSchema* GNOME_KEYRING_NETWORK_PASSWORD;
+//extern const GnomeKeyringPasswordSchema* GNOME_KEYRING_NETWORK_PASSWORD;
+static GnomeKeyringPasswordSchema *my_GKNP = NULL;
 static gpointer gnome_keyring_lib = NULL;
 
 typedef gpointer (*gnome_keyring_store_password_type)(const GnomeKeyringPasswordSchema *schema, const gchar *keyring, const gchar *display_name, const gchar *password, GnomeKeyringOperationDoneCallback callback, gpointer data, GDestroyNotify destroy_data, ...);
@@ -41,7 +42,7 @@ steam_account_get_access_token(SteamAccount *sa) {
 
 #ifdef G_OS_UNIX
 static void
-dummy_gnome_callback(GnomeKeyringOperationDoneCallback result, gpointer user_data) {
+dummy_gnome_callback(GnomeKeyringResult result, gpointer user_data) {
 	// Gnome keyring throws toys out of cots if there's no callback!
 }
 #endif
@@ -54,7 +55,7 @@ steam_account_set_access_token(SteamAccount *sa, const gchar *access_token) {
 			g_free(sa->cached_access_token);
 			sa->cached_access_token = g_strdup(access_token);
 			
-			my_gnome_keyring_store_password(GNOME_KEYRING_NETWORK_PASSWORD,
+			my_gnome_keyring_store_password(my_GKNP, //GNOME_KEYRING_NETWORK_PASSWORD,
 											NULL,
 											_("Steam Mobile OAuth Token"),
 											access_token,
@@ -68,7 +69,7 @@ steam_account_set_access_token(SteamAccount *sa, const gchar *access_token) {
 			g_free(sa->cached_access_token);
 			sa->cached_access_token = NULL;
 			
-			my_gnome_keyring_delete_password(GNOME_KEYRING_NETWORK_PASSWORD,
+			my_gnome_keyring_delete_password(my_GKNP, //GNOME_KEYRING_NETWORK_PASSWORD,
 											 dummy_gnome_callback, NULL, NULL,
 											 "user",		sa->account->username,
 											 "server",		"api.steamcommunity.com",
@@ -995,7 +996,7 @@ steam_login(PurpleAccount *account)
 
 #ifdef G_OS_UNIX
 	if(core_is_haze) {
-		my_gnome_keyring_find_password(GNOME_KEYRING_NETWORK_PASSWORD,
+		my_gnome_keyring_find_password(my_GKNP, //GNOME_KEYRING_NETWORK_PASSWORD,
 										steam_keyring_got_password, sa, NULL,
 										"user",		account->username,
 										"server",	"api.steamcommunity.com",
@@ -1221,17 +1222,12 @@ static gboolean plugin_load(PurplePlugin *plugin)
 {
 	core_is_haze = g_str_equal(purple_core_get_ui(), "haze");
 
-#ifdef G_OS_UNIX	
+#ifdef G_OS_UNIX
 	if (core_is_haze) {
-		gnome_keyring_lib = dlopen("libgnome-keyring.so", RTLD_LAZY);
 		if (!gnome_keyring_lib) {
 			purple_debug_error("steam", "This plugin required Gnome-Keyring when used with Telepathy-Haze\n");
 			return FALSE;
 		}
-		my_gnome_keyring_store_password = (gnome_keyring_store_password_type) dlsym(gnome_keyring_lib, "gnome_keyring_store_password");
-		my_gnome_keyring_delete_password = (gnome_keyring_delete_password_type) dlsym(gnome_keyring_lib, "gnome_keyring_delete_password");
-		my_gnome_keyring_find_password = (gnome_keyring_find_password_type) dlsym(gnome_keyring_lib, "gnome_keyring_find_password");
-		
 		if (!my_gnome_keyring_store_password || !my_gnome_keyring_delete_password || !my_gnome_keyring_find_password) {
 			dlclose(gnome_keyring_lib);
 			purple_debug_error("steam", "This plugin required Gnome-Keyring when used with Telepathy-Haze\n");
@@ -1329,6 +1325,29 @@ static void plugin_init(PurplePlugin *plugin)
 		"change_status_to_game", FALSE);
 	prpl_info->protocol_options = g_list_append(
 		prpl_info->protocol_options, option);
+
+	core_is_haze = g_str_equal(purple_core_get_ui(), "haze");
+
+#ifdef G_OS_UNIX	
+	if (core_is_haze) {
+		gnome_keyring_lib = dlopen("libgnome-keyring.so", RTLD_LAZY);
+		if (!gnome_keyring_lib) {
+			purple_debug_error("steam", "This plugin required Gnome-Keyring when used with Telepathy-Haze\n");
+			return;
+		}
+		my_gnome_keyring_store_password = (gnome_keyring_store_password_type) dlsym(gnome_keyring_lib, "gnome_keyring_store_password");
+		my_gnome_keyring_delete_password = (gnome_keyring_delete_password_type) dlsym(gnome_keyring_lib, "gnome_keyring_delete_password");
+		my_gnome_keyring_find_password = (gnome_keyring_find_password_type) dlsym(gnome_keyring_lib, "gnome_keyring_find_password");
+		my_GKNP = (GnomeKeyringPasswordSchema *) dlsym(gnome_keyring_lib, "GNOME_KEYRING_NETWORK_PASSWORD");		
+
+		if (!my_gnome_keyring_store_password || !my_gnome_keyring_delete_password || !my_gnome_keyring_find_password) {
+			dlclose(gnome_keyring_lib);
+			purple_debug_error("steam", "This plugin required Gnome-Keyring when used with Telepathy-Haze\n");
+			return;
+		}
+	}
+#endif
+
 }
 
 static PurplePluginProtocolInfo prpl_info = {
