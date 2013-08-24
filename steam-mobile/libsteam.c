@@ -57,6 +57,13 @@ steam_account_get_access_token(SteamAccount *sa) {
 static void
 dummy_gnome_callback(GnomeKeyringResult result, gpointer user_data) {
 	// Gnome keyring throws toys out of cots if there's no callback!
+	if (result == GNOME_KEYRING_RESULT_OK) {
+		purple_debug_info("steam", "Access token stored OK\n");
+	} else if (result == GNOME_KEYRING_RESULT_CANCELLED) {
+		purple_debug_error("steam", "Access token not stored, user cancelled\n");
+	} else {
+		purple_debug_error("steam", "Access token not stored, %s\n", gnome_keyring_result_to_message(result));
+	}
 }
 #endif
 
