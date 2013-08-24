@@ -9,8 +9,21 @@ static gboolean core_is_haze = FALSE;
 #include <gnome-keyring.h>
 #include <dlfcn.h>
 
-//extern const GnomeKeyringPasswordSchema* GNOME_KEYRING_NETWORK_PASSWORD;
-static GnomeKeyringPasswordSchema *my_GKNP = NULL;
+// Copy of GNOME_KEYRING_NETWORK_PASSWORD to use locally
+static const GnomeKeyringPasswordSchema network_password_schema = {
+	GNOME_KEYRING_ITEM_NETWORK_PASSWORD,
+	{
+		{ "user", GNOME_KEYRING_ATTRIBUTE_TYPE_STRING },
+		{ "domain", GNOME_KEYRING_ATTRIBUTE_TYPE_STRING },
+		{ "object", GNOME_KEYRING_ATTRIBUTE_TYPE_STRING },
+		{ "protocol", GNOME_KEYRING_ATTRIBUTE_TYPE_STRING },
+		{ "port", GNOME_KEYRING_ATTRIBUTE_TYPE_UINT32 },
+		{ "server", GNOME_KEYRING_ATTRIBUTE_TYPE_STRING },
+		{ "NULL", 0 },
+	}
+};
+static const GnomeKeyringPasswordSchema *my_GKNP = &network_password_schema;
+
 static gpointer gnome_keyring_lib = NULL;
 
 typedef gpointer (*gnome_keyring_store_password_type)(const GnomeKeyringPasswordSchema *schema, const gchar *keyring, const gchar *display_name, const gchar *password, GnomeKeyringOperationDoneCallback callback, gpointer data, GDestroyNotify destroy_data, ...);
@@ -1236,9 +1249,8 @@ static gboolean plugin_load(PurplePlugin *plugin)
 		my_gnome_keyring_store_password = (gnome_keyring_store_password_type) dlsym(gnome_keyring_lib, "gnome_keyring_store_password");
 		my_gnome_keyring_delete_password = (gnome_keyring_delete_password_type) dlsym(gnome_keyring_lib, "gnome_keyring_delete_password");
 		my_gnome_keyring_find_password = (gnome_keyring_find_password_type) dlsym(gnome_keyring_lib, "gnome_keyring_find_password");
-		my_GKNP = (GnomeKeyringPasswordSchema *) dlsym(gnome_keyring_lib, "GNOME_KEYRING_NETWORK_PASSWORD");
 		
-		if (!my_gnome_keyring_store_password || !my_gnome_keyring_delete_password || !my_gnome_keyring_find_password || !my_GKNP) {
+		if (!my_gnome_keyring_store_password || !my_gnome_keyring_delete_password || !my_gnome_keyring_find_password) {
 			dlclose(gnome_keyring_lib);
 			gnome_keyring_lib = NULL;
 			purple_debug_error("steam", "Could not load Gnome-Keyring functions.  This plugin requires Gnome-Keyring when used with Telepathy-Haze\n");
