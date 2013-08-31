@@ -62,7 +62,7 @@ dummy_gnome_callback(GnomeKeyringResult result, gpointer user_data) {
 	} else if (result == GNOME_KEYRING_RESULT_CANCELLED) {
 		purple_debug_error("steam", "Access token not stored, user cancelled\n");
 	} else {
-		purple_debug_error("steam", "Access token not stored, %s\n", gnome_keyring_result_to_message(result));
+		purple_debug_error("steam", "Access token not stored (%d)\n", result);
 	}
 }
 #endif
@@ -1247,7 +1247,7 @@ static gboolean plugin_load(PurplePlugin *plugin)
 	if (core_is_haze && gnome_keyring_lib == NULL) {
 		purple_debug_info("steam", "UI Core is Telepathy-Haze, attempting to load Gnome-Keyring\n");
 		
-		gnome_keyring_lib = dlopen("libgnome-keyring.so", RTLD_LAZY);
+		gnome_keyring_lib = dlopen("libgnome-keyring.so", RTLD_NOW | RTLD_GLOBAL);
 		if (!gnome_keyring_lib) {
 			purple_debug_error("steam", "Could not load Gnome-Keyring library.  This plugin requires Gnome-Keyring when used with Telepathy-Haze\n");
 			return FALSE;
