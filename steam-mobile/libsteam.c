@@ -136,6 +136,16 @@ steam_personastate_to_statustype(gint64 state)
 	return status_id;
 }
 
+static const gchar *
+steam_accountid_to_steamid(gint64 accountid)
+{
+	static gchar steamid[20];
+	
+	sprintf(steamid, "%" G_GINT64_FORMAT, accountid + G_GINT64_CONSTANT(76561197960265728));
+	
+	return steamid;
+}
+
 static void steam_fetch_new_sessionid(SteamAccount *sa);
 static void steam_get_friend_summaries(SteamAccount *sa, const gchar *who);
 
@@ -633,13 +643,13 @@ steam_got_friend_summaries(SteamAccount *sa, JsonObject *obj, gpointer user_data
 		g_free(sbuddy->realname); sbuddy->realname = g_strdup(json_object_get_string_member(player, "realname"));
 		g_free(sbuddy->profileurl); sbuddy->profileurl = g_strdup(json_object_get_string_member(player, "profileurl"));
 		g_free(sbuddy->avatar); sbuddy->avatar = g_strdup(json_object_get_string_member(player, "avatarfull"));
-		sbuddy->personastateflags = json_object_get_int_member(player, "personastateflags");
+		sbuddy->personastateflags = (guint) json_object_get_int_member(player, "personastateflags");
 		
 		// Optional :
-		g_free(sbuddy->gameid); sbuddy->gameid = g_strdup(json_object_get_string_member(player, "gameid"));
-		g_free(sbuddy->gameextrainfo); sbuddy->gameextrainfo = g_strdup(json_object_get_string_member(player, "gameextrainfo"));
-		g_free(sbuddy->gameserversteamid); sbuddy->gameserversteamid = g_strdup(json_object_get_string_member(player, "gameserversteamid"));
-		g_free(sbuddy->lobbysteamid); sbuddy->lobbysteamid = g_strdup(json_object_get_string_member(player, "lobbysteamid"));
+		g_free(sbuddy->gameid); sbuddy->gameid = json_object_has_member(player, "gameid") ? g_strdup(json_object_get_string_member(player, "gameid")) : NULL;
+		g_free(sbuddy->gameextrainfo); sbuddy->gameextrainfo = json_object_has_member(player, "gameextrainfo") ? g_strdup(json_object_get_string_member(player, "gameextrainfo")) : NULL;
+		g_free(sbuddy->gameserversteamid); sbuddy->gameserversteamid = json_object_has_member(player, "gameserversteamid") ? g_strdup(json_object_get_string_member(player, "gameserversteamid")) : NULL;
+		g_free(sbuddy->lobbysteamid); sbuddy->lobbysteamid = json_object_has_member(player, "lobbysteamid") ? g_strdup(json_object_get_string_member(player, "lobbysteamid")) : NULL;
 		
 		sbuddy->lastlogoff = (guint) json_object_get_int_member(player, "lastlogoff");
 		
@@ -690,10 +700,10 @@ steam_get_nickname_list_cb(SteamAccount *sa, JsonObject *obj, gpointer user_data
 	for(index = 0; index < json_array_get_length(nicknames); index++)
 	{
 		JsonObject *friend = json_array_get_object_element(nicknames, index);
-		const gchar *accountid = json_object_get_string_member(friend, "accountid");
+		gint64 accountid = json_object_get_int_member(friend, "accountid");
 		const gchar *nickname = json_object_get_string_member(friend, "nickname");
-		
-		purple_serv_got_private_alias(sa->pc, accountid, nickname);
+				
+		purple_serv_got_private_alias(sa->pc, steam_accountid_to_steamid(accountid), nickname);
 	}
 }
 
@@ -803,9 +813,9 @@ steam_tooltip_text(PurpleBuddy *buddy, PurpleNotifyUserInfo *user_info, gboolean
 		{
 			if (sbuddy->gameid)
 			{
-				purple_notify_user_info_add_pair_html(user_info, "In game %s", sbuddy->gameextrainfo);
+				purple_notify_user_info_add_pair_html(user_info, "In game", sbuddy->gameextrainfo);
 			} else {
-				purple_notify_user_info_add_pair_html(user_info, "In non-Steam game %s", sbuddy->gameextrainfo);
+				purple_notify_user_info_add_pair_html(user_info, "In non-Steam game", sbuddy->gameextrainfo);
 			}
 		}
 	}
