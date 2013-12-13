@@ -684,7 +684,7 @@ static void
 steam_get_nickname_list_cb(SteamAccount *sa, JsonObject *obj, gpointer user_data)
 {
 	JsonObject *response = json_object_get_object_member(obj, "response");
-	JsonArray *nicknames = json_object_get_array_member(obj, "nicknames");
+	JsonArray *nicknames = json_object_get_array_member(response, "nicknames");
 	guint index;
 	
 	for(index = 0; index < json_array_get_length(nicknames); index++)
@@ -778,10 +778,14 @@ static gchar *steam_status_text(PurpleBuddy *buddy)
 	SteamBuddy *sbuddy = buddy->proto_data;
 
 	if (sbuddy && sbuddy->gameextrainfo)
+	{
 		if (sbuddy->gameid)
+		{
 			return g_markup_printf_escaped("In game %s", sbuddy->gameextrainfo);
-		else
+		} else {
 			return g_markup_printf_escaped("In non-Steam game %s", sbuddy->gameextrainfo);
+		}
+	}
 
 	return NULL;
 }
@@ -796,10 +800,14 @@ steam_tooltip_text(PurpleBuddy *buddy, PurpleNotifyUserInfo *user_info, gboolean
 		purple_notify_user_info_add_pair_html(user_info, "Name", sbuddy->personaname);
 		purple_notify_user_info_add_pair_html(user_info, "Real Name", sbuddy->realname);
 		if (sbuddy->gameextrainfo)
+		{
 			if (sbuddy->gameid)
+			{
 				purple_notify_user_info_add_pair_html(user_info, "In game %s", sbuddy->gameextrainfo);
-			else
+			} else {
 				purple_notify_user_info_add_pair_html(user_info, "In non-Steam game %s", sbuddy->gameextrainfo);
+			}
+		}
 	}
 }
 
