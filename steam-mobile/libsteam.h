@@ -103,6 +103,7 @@ struct _SteamBuddy {
 	gchar *profileurl;
 	guint lastlogoff;
 	gchar *avatar;
+	guint personastateflags;
 	
 	gchar *gameid;
 	gchar *gameextrainfo;
