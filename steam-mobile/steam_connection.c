@@ -210,7 +210,11 @@ static void steam_connection_process_data(SteamConnection *steamcon)
 			JsonParser *parser = json_parser_new();
 			if (!json_parser_load_from_data(parser, tmp, len, NULL))
 			{
-				purple_debug_error("steam", "Error parsing response: %s\n", tmp);
+				if (steamcon->error_callback != NULL) {
+					steamcon->error_callback(steamcon->sa, tmp, len, steamcon->user_data);
+				} else {
+					purple_debug_error("steam", "Error parsing response: %s\n", tmp);
+				}
 			} else {
 				JsonNode *root = json_parser_get_root(parser);
 				JsonObject *jsonobj = json_node_get_object(root);
@@ -488,7 +492,8 @@ static void steam_ssl_connection_error(PurpleSslConnection *ssl,
 	}
 }
 
-void steam_post_or_get(SteamAccount *sa, SteamMethod method,
+SteamConnection *
+steam_post_or_get(SteamAccount *sa, SteamMethod method,
 		const gchar *host, const gchar *url, const gchar *postdata,
 		SteamProxyCallbackFunc callback_func, gpointer user_data,
 		gboolean keepalive)
@@ -610,6 +615,8 @@ void steam_post_or_get(SteamAccount *sa, SteamMethod method,
 	
 	g_queue_push_head(sa->waiting_conns, steamcon);
 	steam_next_connection(sa);
+	
+	return steamcon;
 }
 
 static void steam_next_connection(SteamAccount *sa)

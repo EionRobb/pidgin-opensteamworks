@@ -5,6 +5,7 @@
 #include "libsteam.h"
 
 typedef void (*SteamProxyCallbackFunc)(SteamAccount *sa, JsonObject *obj, gpointer user_data);
+typedef void (*SteamProxyCallbackErrorFunc)(SteamAccount *sa, const gchar *data, gssize data_len, gpointer user_data);
 
 /*
  * This is a bitmask.
@@ -35,11 +36,12 @@ struct _SteamConnection {
 	time_t request_time;
 	guint retry_count;
 	guint timeout_watcher;
+	SteamProxyCallbackErrorFunc error_callback;
 };
 
 void steam_connection_destroy(SteamConnection *steamcon);
 void steam_connection_close(SteamConnection *steamcon);
-void steam_post_or_get(SteamAccount *sa, SteamMethod method,
+SteamConnection *steam_post_or_get(SteamAccount *sa, SteamMethod method,
 		const gchar *host, const gchar *url, const gchar *postdata,
 		SteamProxyCallbackFunc callback_func, gpointer user_data,
 		gboolean keepalive);
