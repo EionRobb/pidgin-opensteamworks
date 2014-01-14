@@ -896,7 +896,7 @@ steam_login_access_token_cb(SteamAccount *sa, JsonObject *obj, gpointer user_dat
 	if (!g_str_equal(json_object_get_string_member(obj, "error"), "OK"))
 	{
 		purple_debug_error("steam", "access_token login error: %s\n", json_object_get_string_member(obj, "error"));
-		purple_connection_error(sa->pc, PURPLE_CONNECTION_ERROR_AUTHENTICATION_FAILED, _("Bad username/password or Steam Guard Code required"));
+		purple_connection_error(sa->pc, PURPLE_CONNECTION_ERROR_NETWORK_ERROR, json_object_get_string_member(obj, "error"));
 		return;
 	}
 
@@ -929,6 +929,13 @@ steam_login_with_access_token_error_cb(SteamAccount *sa, const gchar *data, gssi
 		
 		steam_account_set_access_token(sa, NULL);
 		steam_get_rsa_key(sa);
+	} else {
+		xmlnode *error_response = xmlnode_from_str(data, data_len);
+		xmlnode *title = xmlnode_get_child(error_response, "title");
+		gchar *title_str = xmlnode_get_data_unescaped(title);
+		purple_connection_error(sa->pc, PURPLE_CONNECTION_ERROR_NETWORK_ERROR, title_str);
+		g_free(title_str);
+		xmlnode_free(error_response);
 	}
 }
 
