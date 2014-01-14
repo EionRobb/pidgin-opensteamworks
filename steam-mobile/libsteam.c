@@ -895,6 +895,7 @@ steam_login_access_token_cb(SteamAccount *sa, JsonObject *obj, gpointer user_dat
 {
 	if (!g_str_equal(json_object_get_string_member(obj, "error"), "OK"))
 	{
+		purple_debug_error("steam", "access_token login error: %s\n", json_object_get_string_member(obj, "error"));
 		purple_connection_error(sa->pc, PURPLE_CONNECTION_ERROR_AUTHENTICATION_FAILED, _("Bad username/password or Steam Guard Code required"));
 		return;
 	}
