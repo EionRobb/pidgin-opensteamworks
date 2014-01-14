@@ -959,7 +959,12 @@ steam_set_steam_guard_token_cb(gpointer data, const gchar *steam_guard_token)
 	PurpleAccount *account = data;
 	
 	purple_account_set_string(account, "steam_guard_code", steam_guard_token);
-	purple_account_connect(account);
+	
+	if (!purple_account_get_enabled(account, purple_core_get_ui())) {
+		purple_account_set_enabled(account, purple_core_get_ui(), TRUE);
+	} else {
+		purple_account_connect(account);
+	}
 }
 
 static void
@@ -1005,7 +1010,12 @@ steam_login_cb(SteamAccount *sa, JsonObject *obj, gpointer user_data)
 			purple_connection_error(sa->pc, PURPLE_CONNECTION_ERROR_AUTHENTICATION_FAILED, error_description);
 		} else
 		{
-			purple_connection_error(sa->pc, PURPLE_CONNECTION_ERROR_AUTHENTICATION_FAILED, error_description);
+			if (g_str_equal(error_description, "SteamGuard"))
+			{
+				steam_set_steam_guard_token_cb(sa->account, NULL);
+			} else {
+				purple_connection_error(sa->pc, PURPLE_CONNECTION_ERROR_AUTHENTICATION_FAILED, error_description);
+			}
 		}
 	}
 }
