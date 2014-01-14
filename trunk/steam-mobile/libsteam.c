@@ -1032,7 +1032,7 @@ steam_login_got_rsakey(SteamAccount *sa, JsonObject *obj, gpointer user_data)
 							json_object_get_string_member(obj, "publickey_exp"),
 							account->password);
 	
-	purple_debug_misc("steam", "Encrypted password is %s\n", encrypted_password);
+	//purple_debug_misc("steam", "Encrypted password is %s\n", encrypted_password);
 	
 	if (!encrypted_password)
 	{
@@ -1051,7 +1051,7 @@ steam_login_got_rsakey(SteamAccount *sa, JsonObject *obj, gpointer user_data)
 	g_string_append(post, "captchagid=-1&");
 	g_string_append_printf(post, "rsatimestamp=%s", purple_url_encode(json_object_get_string_member(obj, "timestamp")));
 	
-	purple_debug_misc("steam", "Postdata: %s\n", post->str);
+	//purple_debug_misc("steam", "Postdata: %s\n", post->str);
 	
 	steam_post_or_get(sa, STEAM_METHOD_POST | STEAM_METHOD_SSL, "steamcommunity.com", "/mobilelogin/dologin", post->str, steam_login_cb, NULL, TRUE);
 	g_string_free(post, TRUE);
