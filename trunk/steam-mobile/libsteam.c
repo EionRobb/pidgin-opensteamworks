@@ -5,6 +5,11 @@
 
 static gboolean core_is_haze = FALSE;
 
+// Hack to fix OSX compatibility :)
+#ifdef __APPLE__
+#	undef G_OSX_UNIX
+#endif
+
 #ifdef G_OS_UNIX
 #include <gnome-keyring.h>
 #include <dlfcn.h>
@@ -1343,9 +1348,10 @@ steam_buddy_remove(PurpleConnection *pc, PurpleBuddy *buddy, PurpleGroup *group)
 static gboolean plugin_load(PurplePlugin *plugin)
 {
 	purple_debug_info("steam", "Purple core UI name: %s\n", purple_core_get_ui());
-	core_is_haze = g_str_equal(purple_core_get_ui(), "haze");
 	
 #ifdef G_OS_UNIX
+	core_is_haze = g_str_equal(purple_core_get_ui(), "haze");
+	
 	if (core_is_haze && gnome_keyring_lib == NULL) {
 		purple_debug_info("steam", "UI Core is Telepathy-Haze, attempting to load Gnome-Keyring\n");
 		

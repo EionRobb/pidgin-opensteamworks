@@ -9,6 +9,15 @@ password=<base64rsaencryptedpwd>&username=<steamusername>&emailauth=&captchagid=
 
 */
 
+#if defined USE_OPENSSL_CRYPTO && !defined __APPLE__
+#undef USE_OPENSSL_CRYPTO
+#endif
+
+#if !defined USE_POLARSSL_CRYPTO && !defined USE_OPENSSL_CRYPTO && !defined USE_NSS_CRYPTO
+#define USE_NSS_CRYPTO
+#endif
+
+#ifdef USE_NSS_CRYPTO
 
 #include <nss.h>
 #include <base64.h>
@@ -128,3 +137,147 @@ steam_encrypt_password(const gchar *modulus_str, const gchar *exponent_str, cons
 	
 	return output;
 }
+
+#elif defined USE_POLARSSL_CRYPTO
+
+#include "polarssl/config.h"
+#include "polarssl/rsa.h"
+#include "polarssl/entropy.h"
+#include "polarssl/ctr_drbg.h"
+
+gchar *
+steam_encrypt_password(const gchar *modulus_str, const gchar *exponent_str, const gchar *password)
+{
+	rsa_context rsa;
+	entropy_context entropy;
+	ctr_drbg_context ctr_drbg;
+	int ret;
+	guchar *encrypted_password;
+	gchar *output;
+
+	// Init entropy context
+	entropy_init(&entropy);
+	ret = ctr_drbg_init(&ctr_drbg, entropy_func, &entropy, NULL, 0);
+
+	if (ret != 0) {
+		purple_debug_error("steam", "RSA init failed, error=%d\n", ret);
+		return NULL;
+	}
+
+	// Init polarssl rsa
+	rsa_init(&rsa, RSA_PKCS_V15, 0);
+
+	// Read modulus
+	ret = mpi_read_string(&rsa.N, 16, modulus_str);
+	if (ret != 0) {
+		purple_debug_error("steam", "modulus parsing failed, error=%d\n", ret);
+		return NULL;
+	}
+
+	// Read exponent
+	ret = mpi_read_string(&rsa.E, 16, exponent_str);
+	if (ret != 0) {
+		purple_debug_error("steam", "exponent parsing failed, error=%d\n", ret);
+		return NULL;
+	}
+
+	// Set RSA key length
+	rsa.len = ( mpi_msb( &rsa.N ) + 7 ) >> 3;
+
+	// Allocate space for encrypted password
+	encrypted_password = g_new0(guchar, rsa.len);
+
+	ret = rsa_pkcs1_encrypt(&rsa, ctr_drbg_random, &ctr_drbg, RSA_PUBLIC, strlen(password), (unsigned char*)password, encrypted_password);
+
+	if (ret != 0) {
+		purple_debug_error("steam", "password encryption failed, error=%d\n", ret);
+		g_free(encrypted_password);
+		return NULL;
+	}
+
+	output = purple_base64_encode(encrypted_password, (int)rsa.len);
+	g_free(encrypted_password);
+
+	return output;
+}
+
+#elif defined USE_OPENSSL_CRYPTO
+
+#include <openssl/rsa.h>
+#include <openssl/bio.h>
+#include <openssl/bn.h>
+#include <openssl/err.h>
+#include <openssl/evp.h>
+#include <openssl/engine.h>
+
+gchar *
+steam_encrypt_password_openssl(const gchar *modulus_str, const gchar *exponent_str, const gchar *password)
+{
+	BIGNUM *bn_modulus;
+	BIGNUM *bn_exponent;
+	RSA *rsa;
+	gchar *output = NULL;
+	guchar *encrypted;
+	int rv;
+	
+	ERR_load_crypto_strings();
+	
+	bn_modulus = BN_new();
+	rv = BN_hex2bn(&bn_modulus, modulus_str);
+	if (rv == 0)
+	{
+		purple_debug_error("steam", "modulus hext to bignum parse failed\n");
+		BN_free(bn_modulus);
+		return NULL;
+	}
+	
+	bn_exponent = BN_new();
+	rv = BN_hex2bn(&bn_exponent, exponent_str);
+	if (rv == 0)
+	{
+		purple_debug_error("steam", "exponent hex to bignum parse failed\n");
+		BN_clear_free(bn_modulus);
+		BN_clear_free(bn_exponent);
+		return NULL;
+	}
+	
+	rsa = RSA_new();
+	if (rsa == NULL)
+	{
+		purple_debug_error("steam", "RSA structure allocation failed\n");
+		BN_free(bn_modulus);
+		BN_free(bn_exponent);
+		return NULL;
+	}
+	BN_free(rsa->n);
+	rsa->n = bn_modulus;
+	BN_free(rsa->e);
+	rsa->e = bn_exponent;
+	
+	encrypted = g_new0(guchar, RSA_size(rsa));
+	rv = RSA_public_encrypt((int)(strlen(password)),
+                          (const unsigned char *)password,
+                          encrypted,
+                          rsa,
+                          RSA_PKCS1_PADDING);
+	if (rv < 0)
+	{
+		unsigned long error_num = ERR_get_error();
+		char *error_str = ERR_error_string(error_num, NULL);
+		purple_debug_error("steam", error_str);
+		RSA_free(rsa);
+		g_free(encrypted);
+		return NULL;
+	}
+	
+	output = purple_base64_encode(encrypted, RSA_size(rsa));
+	
+	// Cleanup
+	RSA_free(rsa);
+	ERR_free_strings();
+	g_free(encrypted);
+	
+	return output;
+}
+
+#endif
