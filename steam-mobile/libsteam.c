@@ -227,6 +227,8 @@ steam_fetch_new_sessionid(SteamAccount *sa)
 	steam_post_or_get(sa, STEAM_METHOD_GET | STEAM_METHOD_SSL, "steamcommunity.com", "/mobilesettings/GetManifest/v0001", NULL, steam_fetch_new_sessionid_cb, NULL, FALSE);
 }
 
+static guint active_icon_downloads = 0;
+
 static void
 steam_get_icon_cb(PurpleUtilFetchUrlData *url_data, gpointer user_data, const gchar *url_text, gsize len, const gchar *error_message)
 {
@@ -239,10 +241,12 @@ steam_get_icon_cb(PurpleUtilFetchUrlData *url_data, gpointer user_data, const gc
 	sbuddy = buddy->proto_data;
 	
 	purple_buddy_icons_set_for_user(buddy->account, buddy->name, g_memdup(url_text, len), len, sbuddy->avatar);
+	
+	active_icon_downloads--;
 }
 
 static void
-steam_get_icon(PurpleBuddy *buddy)
+steam_get_icon_now(PurpleBuddy *buddy)
 {
 	const gchar *old_avatar = purple_buddy_icons_get_checksum_for_user(buddy);
 	SteamBuddy *sbuddy;
@@ -264,6 +268,29 @@ steam_get_icon(PurpleBuddy *buddy)
 #else
 	purple_util_fetch_url_request(sbuddy->avatar, TRUE, NULL, FALSE, NULL, FALSE, steam_get_icon_cb, buddy);
 #endif
+
+	active_icon_downloads++;
+}
+
+static gboolean
+steam_get_icon_queuepop(gpointer data)
+{
+	PurpleBuddy *buddy = data;
+	
+	// Only allow 4 simultaneous downloads
+	if (active_icon_downloads > 4)
+		return TRUE;
+	
+	steam_get_icon_now(buddy);
+	return FALSE;
+}
+
+static void
+steam_get_icon(PurpleBuddy *buddy)
+{
+	if (!buddy) return;
+	
+	purple_timeout_add(100, steam_get_icon_queuepop, (gpointer)buddy);
 }
 
 static void steam_poll(SteamAccount *sa, gboolean secure, guint message);
