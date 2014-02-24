@@ -683,6 +683,7 @@ steam_got_friend_summaries(SteamAccount *sa, JsonObject *obj, gpointer user_data
 		g_free(sbuddy->gameextrainfo); sbuddy->gameextrainfo = json_object_has_member(player, "gameextrainfo") ? g_strdup(json_object_get_string_member(player, "gameextrainfo")) : NULL;
 		g_free(sbuddy->gameserversteamid); sbuddy->gameserversteamid = json_object_has_member(player, "gameserversteamid") ? g_strdup(json_object_get_string_member(player, "gameserversteamid")) : NULL;
 		g_free(sbuddy->lobbysteamid); sbuddy->lobbysteamid = json_object_has_member(player, "lobbysteamid") ? g_strdup(json_object_get_string_member(player, "lobbysteamid")) : NULL;
+		g_free(sbuddy->gameserverip); sbuddy->gameserverip = json_object_has_member(player, "gameserverip") ? g_strdup(json_object_get_string_member(player, "gameserverip")) : NULL;
 		
 		sbuddy->lastlogoff = (guint) json_object_get_int_member(player, "lastlogoff");
 		
@@ -1331,6 +1332,7 @@ static void steam_buddy_free(PurpleBuddy *buddy)
 		g_free(sbuddy->gameextrainfo);
 		g_free(sbuddy->gameserversteamid);
 		g_free(sbuddy->lobbysteamid);
+		g_free(sbuddy->gameserverip);
 		
 		g_free(sbuddy);
 	}
@@ -1428,6 +1430,54 @@ static GList *steam_actions(PurplePlugin *plugin, gpointer context)
 }
 
 void
+steam_blist_launch_game(PurpleBlistNode *node, gpointer data)
+{
+	PurpleBuddy *buddy;
+	SteamBuddy *sbuddy;
+	PurplePlugin *handle = purple_find_prpl(STEAM_PLUGIN_ID);
+	
+	if(!PURPLE_BLIST_NODE_IS_BUDDY(node))
+		return;
+	buddy = (PurpleBuddy *) node;
+	if (!buddy)
+		return;
+	sbuddy = buddy->proto_data;
+	if (sbuddy && sbuddy->gameid) 
+	{
+		gchar *runurl = g_strdup_printf("steam://rungameid/%s", sbuddy->gameid);
+		purple_notify_uri(handle, runurl);
+		g_free(runurl);
+	}
+}
+
+void
+steam_blist_join_game(PurpleBlistNode *node, gpointer data)
+{
+	PurpleBuddy *buddy;
+	SteamBuddy *sbuddy;
+	PurplePlugin *handle = purple_find_prpl(STEAM_PLUGIN_ID);
+	
+	if(!PURPLE_BLIST_NODE_IS_BUDDY(node))
+		return;
+	buddy = (PurpleBuddy *) node;
+	if (!buddy)
+		return;
+	sbuddy = buddy->proto_data;
+	if (sbuddy) {
+		if (sbuddy->gameserverip && !g_str_equal(sbuddy->gameserversteamid, "1")) 
+		{
+			gchar *joinurl = g_strdup_printf("steam://connect/%s", sbuddy->gameserverip);
+			purple_notify_uri(handle, joinurl);
+			g_free(joinurl);
+		} else if (sbuddy->lobbysteamid) {
+			gchar *joinurl = g_strdup_printf("steam://joinlobby/%s/%s/%s", sbuddy->gameid, sbuddy->lobbysteamid, sbuddy->steamid);
+			purple_notify_uri(handle, joinurl);
+			g_free(joinurl);
+		}
+	}
+}
+
+void
 steam_blist_view_profile(PurpleBlistNode *node, gpointer data)
 {
 	PurpleBuddy *buddy;
@@ -1455,6 +1505,7 @@ steam_node_menu(PurpleBlistNode *node)
 	GList *m = NULL;
 	PurpleMenuAction *act;
 	PurpleBuddy *buddy;
+	SteamBuddy *sbuddy;
 	
 	if(PURPLE_BLIST_NODE_IS_BUDDY(node))
 	{
@@ -1464,6 +1515,24 @@ steam_node_menu(PurpleBlistNode *node)
 				PURPLE_CALLBACK(steam_blist_view_profile),
 				NULL, NULL);
 		m = g_list_append(m, act);
+		
+		sbuddy = buddy->proto_data;
+		if (sbuddy->gameid)
+		{
+			act = purple_menu_action_new("Launch Game",
+					PURPLE_CALLBACK(steam_blist_launch_game),
+					NULL, NULL);
+			m = g_list_append(m, act);
+			
+			if (sbuddy->lobbysteamid || 
+				(sbuddy->gameserverip && !g_str_equal(sbuddy->gameserversteamid, "1"))) 
+			{
+				act = purple_menu_action_new("Join Game",
+						PURPLE_CALLBACK(steam_blist_join_game),
+						NULL, NULL);
+				m = g_list_append(m, act);
+			}
+		}
 	}
 	return m;
 }
