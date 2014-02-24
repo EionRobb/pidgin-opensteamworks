@@ -109,6 +109,7 @@ struct _SteamBuddy {
 	gchar *gameextrainfo;
 	gchar *gameserversteamid;
 	gchar *lobbysteamid;
+	gchar *gameserverip;
 };
 
 
