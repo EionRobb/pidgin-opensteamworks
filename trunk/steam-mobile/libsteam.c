@@ -1517,7 +1517,7 @@ steam_node_menu(PurpleBlistNode *node)
 		m = g_list_append(m, act);
 		
 		sbuddy = buddy->proto_data;
-		if (sbuddy->gameid)
+		if (sbuddy && sbuddy->gameid)
 		{
 			act = purple_menu_action_new("Launch Game",
 					PURPLE_CALLBACK(steam_blist_launch_game),
