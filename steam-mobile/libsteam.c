@@ -1,5 +1,3 @@
-
-
 #include "libsteam.h"
 #include "steam_connection.h"
 
@@ -7,7 +5,7 @@ static gboolean core_is_haze = FALSE;
 
 // Hack to fix OSX compatibility :)
 #ifdef __APPLE__
-#	undef G_OSX_UNIX
+#undef G_OSX_UNIX
 #endif
 
 #ifdef G_OS_UNIX
