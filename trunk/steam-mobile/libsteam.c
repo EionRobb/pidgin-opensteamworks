@@ -843,12 +843,14 @@ steam_tooltip_text(PurpleBuddy *buddy, PurpleNotifyUserInfo *user_info, gboolean
 		purple_notify_user_info_add_pair_html(user_info, "Real Name", sbuddy->realname);
 		if (sbuddy->gameextrainfo)
 		{
+			gchar *gamename = purple_strdup_withhtml(sbuddy->gameextrainfo);
 			if (sbuddy->gameid)
 			{
-				purple_notify_user_info_add_pair_html(user_info, "In game", sbuddy->gameextrainfo);
+				purple_notify_user_info_add_pair_html(user_info, "In game", gamename);
 			} else {
-				purple_notify_user_info_add_pair_html(user_info, "In non-Steam game", sbuddy->gameextrainfo);
+				purple_notify_user_info_add_pair_html(user_info, "In non-Steam game", gamename);
 			}
+			g_free(gamename);
 		}
 	}
 }
@@ -1462,7 +1464,7 @@ steam_blist_join_game(PurpleBlistNode *node, gpointer data)
 		return;
 	sbuddy = buddy->proto_data;
 	if (sbuddy) {
-		if (sbuddy->gameserverip && !g_str_equal(sbuddy->gameserversteamid, "1")) 
+		if (sbuddy->gameserverip && (!sbuddy->gameserversteamid || !g_str_equal(sbuddy->gameserversteamid, "1"))) 
 		{
 			gchar *joinurl = g_strdup_printf("steam://connect/%s", sbuddy->gameserverip);
 			purple_notify_uri(handle, joinurl);
@@ -1523,7 +1525,7 @@ steam_node_menu(PurpleBlistNode *node)
 			m = g_list_append(m, act);
 			
 			if (sbuddy->lobbysteamid || 
-				(sbuddy->gameserverip && !g_str_equal(sbuddy->gameserversteamid, "1"))) 
+				(sbuddy->gameserverip && (!sbuddy->gameserversteamid || !g_str_equal(sbuddy->gameserversteamid, "1")))) 
 			{
 				act = purple_menu_action_new("Join Game",
 						PURPLE_CALLBACK(steam_blist_join_game),
