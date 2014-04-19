@@ -520,7 +520,7 @@ steam_poll_cb(SteamAccount *sa, JsonObject *obj, gpointer user_data)
 					} else {
 						text = g_strdup(json_object_get_string_member(message, "text"));
 					}
-					html = purple_strdup_withhtml(text);
+					html = purple_markup_escape_text(text, -1);
 					from = json_object_get_string_member(message, "steamid_from");
 					if (g_str_has_prefix(type, "my_")) {
 						PurpleConversation *conv = purple_find_conversation_with_account(PURPLE_CONV_TYPE_IM, from, sa->account);
@@ -1303,7 +1303,7 @@ static gint steam_send_im(PurpleConnection *pc, const gchar *who, const gchar *m
 	g_string_append_printf(post, "access_token=%s&", purple_url_encode(steam_account_get_access_token(sa)));
 	g_string_append_printf(post, "umqid=%s&", purple_url_encode(sa->umqid));
 	
-	stripped = purple_markup_strip_html(msg);
+	stripped = purple_unescape_html(msg);
 	g_string_append(post, "type=saytext&");
 	g_string_append_printf(post, "text=%s&", purple_url_encode(stripped));
 	g_string_append_printf(post, "steamid_dst=%s", who);
