@@ -1343,6 +1343,11 @@ steam_fake_group_buddy(PurpleConnection *pc, const char *who, const char *old_gr
 {
 	// Do nothing to stop the remove+add behaviour
 }
+void
+steam_fake_group_rename(PurpleConnection *pc, const char *old_name, PurpleGroup *group, GList *moved_buddies)
+{
+	// Do nothing to stop the remove+add behaviour
+}
 
 void
 #if PURPLE_VERSION_CHECK(3, 0, 0)
@@ -1616,7 +1621,7 @@ static PurplePluginProtocolInfo prpl_info = {
 #endif
 	NULL,                   /* alias_buddy */
 	steam_fake_group_buddy,    /* group_buddy */
-	NULL,//steam_group_rename,        /* rename_group */
+	steam_fake_group_rename,   /* rename_group */
 	steam_buddy_free,          /* buddy_free */
 	NULL,//steam_conversation_closed, /* convo_closed */
 	purple_normalize_nocase,/* normalize */
