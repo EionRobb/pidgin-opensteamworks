@@ -91,6 +91,10 @@ struct _SteamAccount {
 	gchar *cached_access_token;
 	
 	guint watchdog_timeout;
+	
+	gchar *captcha_gid;
+	gchar *captcha_text;
+	gchar *twofactorcode;
 };
 
 struct _SteamBuddy {

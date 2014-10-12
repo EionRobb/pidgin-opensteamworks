@@ -225,6 +225,56 @@ steam_fetch_new_sessionid(SteamAccount *sa)
 	steam_post_or_get(sa, STEAM_METHOD_GET | STEAM_METHOD_SSL, "steamcommunity.com", "/mobilesettings/GetManifest/v0001", NULL, steam_fetch_new_sessionid_cb, NULL, FALSE);
 }
 
+
+static void
+steam_captcha_cancel_cb(PurpleConnection *pc, PurpleRequestFields *fields)
+{
+	purple_connection_error_reason(pc, PURPLE_CONNECTION_ERROR_AUTHENTICATION_FAILED,
+		"Could not authenticate captcha.");
+}
+
+static void
+steam_captcha_ok_cb(PurpleConnection *pc, PurpleRequestFields *fields)
+{
+	SteamAccount *sa = pc->proto_data;
+	const gchar *captcha_response;
+	
+	captcha_response = purple_request_fields_get_string(fields, "captcha_response");
+
+	sa->captcha_text = g_strdup(captcha_response);
+	
+	//re-login
+	steam_get_rsa_key(sa);
+}
+
+static void
+steam_captcha_image_cb(PurpleUtilFetchUrlData *url_data, gpointer userdata, const gchar *response, gsize len, const gchar *error_message)
+{
+	SteamAccount *sa = userdata;
+	PurpleRequestFields *fields;
+	PurpleRequestFieldGroup *group;
+	PurpleRequestField *field;
+	
+	fields = purple_request_fields_new();
+	group = purple_request_field_group_new(NULL);
+	purple_request_fields_add_group(fields, group);
+	
+	field = purple_request_field_image_new("captcha_image", "", response, len);
+	purple_request_field_group_add_field(group, field);
+	
+	field = purple_request_field_string_new("captcha_response", "", "", FALSE);
+	purple_request_field_group_add_field(group, field);
+	
+	purple_request_fields(sa->pc, 
+		_("Steam Captcha"), _("Steam Captcha"), 
+		_("Enter both words below, separated by a space"), 
+		fields, 
+		_("OK"), G_CALLBACK(steam_captcha_ok_cb), 
+		_("Logout"), G_CALLBACK(steam_captcha_cancel_cb), 
+		sa->account, NULL, NULL, sa->pc	 
+	);
+}
+
 static guint active_icon_downloads = 0;
 
 static void
@@ -1001,6 +1051,22 @@ steam_set_steam_guard_token_cb(gpointer data, const gchar *steam_guard_token)
 }
 
 static void
+steam_set_two_factor_auth_code_cb(gpointer data, const gchar *twofactorcode)
+{
+	SteamAccount *sa = data;
+	
+	if (twofactorcode && *twofactorcode) {	
+		sa->twofactorcode = g_strdup(twofactorcode);
+		
+		//re-login
+		steam_get_rsa_key(sa);
+	} else {
+		purple_connection_error_reason(sa->pc, PURPLE_CONNECTION_ERROR_AUTHENTICATION_FAILED,
+		"Could not authenticate two-factor code.");
+	}
+}
+
+static void
 steam_login_cb(SteamAccount *sa, JsonObject *obj, gpointer user_data)
 {
 //{"success":true,"redirect_uri":"steammobile:\/\/mobileloginsucceeded","login_complete":true,"oauth":"{\"steamid\":\"id\",\"oauth_token\":\"oauthtoken\",\"webcookie\":\"webcookie\"}"}
@@ -1038,9 +1104,24 @@ steam_login_cb(SteamAccount *sa, JsonObject *obj, gpointer user_data)
 		} else if (json_object_get_boolean_member(obj, "captcha_needed"))
 		{
 			const gchar *captcha_gid = json_object_get_string_member(obj, "captcha_gid");
-			//https://steamcommunity.com/public/captcha.php?gid=%s captcha_gid
-			//TODO
-			purple_connection_error(sa->pc, PURPLE_CONNECTION_ERROR_AUTHENTICATION_FAILED, error_description);
+			gchar *captcha_url = g_strdup_printf("https://steamcommunity.com/public/captcha.php?gid=%s", captcha_gid);
+			
+			sa->captcha_gid = g_strdup(captcha_gid);
+#if PURPLE_VERSION_CHECK(3, 0, 0)
+			purple_util_fetch_url_request(sa->account, captcha_url, TRUE, NULL, FALSE, NULL, FALSE, -1, steam_captcha_image_cb, sa);
+#else
+			purple_util_fetch_url_request(captcha_url, TRUE, NULL, FALSE, NULL, FALSE, steam_captcha_image_cb, sa);
+#endif
+			g_free(captcha_url);
+			
+		} else if (json_object_get_boolean_member(obj, "requires_twofactor"))
+		{
+			purple_request_input(sa->pc, NULL, _("Steam two-factor authentication"),
+						_("Copy the two-factor auth code you have received"), NULL,
+						FALSE, FALSE, "Two-Factor Auth Code", _("OK"),
+						G_CALLBACK(steam_set_two_factor_auth_code_cb), _("Cancel"),
+						G_CALLBACK(steam_set_two_factor_auth_code_cb), sa->account, 
+						NULL, NULL, sa);
 		} else
 		{
 			if (g_str_equal(error_description, "SteamGuard"))
@@ -1089,9 +1170,26 @@ steam_login_got_rsakey(SteamAccount *sa, JsonObject *obj, gpointer user_data)
 	g_string_append_printf(post, "password=%s&", purple_url_encode(encrypted_password));
 	g_string_append_printf(post, "username=%s&", purple_url_encode(account->username));
 	g_string_append_printf(post, "emailauth=%s&", purple_url_encode(purple_account_get_string(account, "steam_guard_code", "")));
+	g_string_append(post, "loginfriendlyname=libpurple&");
 	g_string_append(post, "oauth_client_id=3638BFB1&");
 	g_string_append(post, "oauth_scope=read_profile write_profile read_client write_client&");
-	g_string_append(post, "captchagid=-1&");
+	
+	if (sa->captcha_gid != NULL) {
+		g_string_append_printf(post, "captchagid=%s&", purple_url_encode(sa->captcha_gid));
+		if (sa->captcha_text != NULL) {
+			g_string_append_printf(post, "captcha_text=%s&", purple_url_encode(sa->captcha_text));
+		}
+		g_free(sa->captcha_gid); sa->captcha_gid = NULL;
+		g_free(sa->captcha_text); sa->captcha_text = NULL;
+	} else {
+		g_string_append(post, "captchagid=-1&");
+	}
+	
+	if (sa->twofactorcode != NULL) {
+		g_string_append_printf(post, "twofactorcode=%s&", purple_url_encode(sa->twofactorcode));
+		g_free(sa->twofactorcode); sa->twofactorcode = NULL;
+	}
+	
 	g_string_append_printf(post, "rsatimestamp=%s", purple_url_encode(json_object_get_string_member(obj, "timestamp")));
 	
 	//purple_debug_misc("steam", "Postdata: %s\n", post->str);
@@ -1218,6 +1316,10 @@ static void steam_close(PurpleConnection *pc)
 	g_hash_table_destroy(sa->sent_messages_hash);
 	g_hash_table_destroy(sa->cookie_table);
 	g_hash_table_destroy(sa->hostname_ip_cache);
+	
+	g_free(sa->captcha_gid);
+	g_free(sa->captcha_text);
+	g_free(sa->twofactorcode);
 	
 	g_free(sa->cached_access_token);
 	g_free(sa->umqid);
