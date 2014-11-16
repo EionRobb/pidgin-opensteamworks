@@ -1014,11 +1014,18 @@ steam_login_with_access_token_error_cb(SteamAccount *sa, const gchar *data, gssi
 		steam_get_rsa_key(sa);
 	} else {
 		xmlnode *error_response = xmlnode_from_str(data, data_len);
-		xmlnode *title = xmlnode_get_child(error_response, "title");
-		gchar *title_str = xmlnode_get_data_unescaped(title);
-		purple_connection_error(sa->pc, PURPLE_CONNECTION_ERROR_NETWORK_ERROR, title_str);
-		g_free(title_str);
-		xmlnode_free(error_response);
+		if (error_response != NULL) {
+			xmlnode *title = xmlnode_get_child(error_response, "title");
+			gchar *title_str = xmlnode_get_data_unescaped(title);
+			purple_connection_error(sa->pc, PURPLE_CONNECTION_ERROR_NETWORK_ERROR, title_str);
+			g_free(title_str);
+			xmlnode_free(error_response);
+		} else {
+			purple_debug_error("steam", "Access token login error: %s\n", data);
+			gchar *http_error = g_strndup(data, strchr(data, '\n') - data);
+			purple_connection_error(sa->pc, PURPLE_CONNECTION_ERROR_NETWORK_ERROR, http_error);
+			g_free(http_error);
+		}
 	}
 }
 
