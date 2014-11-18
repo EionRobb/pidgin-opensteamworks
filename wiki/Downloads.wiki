@@ -1,6 +1,7 @@
 = Downloads =
 
 Latest version: *v1.5*
+See HowToInstall for information on how to install
 
 = Latest versions =
 
@@ -13,6 +14,10 @@ Latest version: *v1.5*
 
 *Source*
   * [http://pidgin-opensteamworks.googlecode.com/svn/trunk/steam-mobile/releases/steam-mobile-1.5.tar.bz2 steam-mobile-1.5.tar.bz2]
+
+= Icons =
+  * [http://pidgin-opensteamworks.googlecode.com/svn/trunk/steam-mobile/releases/icons.zip icons.zip] - extract to the pixmaps/pidgin/protocols folder
+
 
 = Older versions =
 
