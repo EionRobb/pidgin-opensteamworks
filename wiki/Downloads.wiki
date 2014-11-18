@@ -1,19 +1,20 @@
 = Downloads =
 
-Latest version: *v1.4*
+Latest version: *v1.5*
 
 = Latest versions =
 
 *Windows*
-  * [http://pidgin-opensteamworks.googlecode.com/svn/trunk/steam-mobile/releases/libsteam-1.4.dll libsteam.dll]
+  * [http://pidgin-opensteamworks.googlecode.com/svn/trunk/steam-mobile/releases/libsteam-1.5.dll libsteam.dll]
 
 *Linux*
-  * 32-bit [http://pidgin-opensteamworks.googlecode.com/svn/trunk/steam-mobile/releases/libsteam-1.4.so libsteam.so]
-  * 64-bit [http://pidgin-opensteamworks.googlecode.com/svn/trunk/steam-mobile/releases/libsteam64-1.4.so libsteam64.so]
+  * 32-bit [http://pidgin-opensteamworks.googlecode.com/svn/trunk/steam-mobile/releases/libsteam-1.5.so libsteam.so]
+  * ~~64-bit [http://pidgin-opensteamworks.googlecode.com/svn/trunk/steam-mobile/releases/libsteam64-1.5.so libsteam64.so]~~
 
 *Source*
-  * [http://pidgin-opensteamworks.googlecode.com/svn/trunk/steam-mobile/releases/steam-mobile-1.4.tar.bz2 steam-mobile-1.4.tar.bz2]
+  * [http://pidgin-opensteamworks.googlecode.com/svn/trunk/steam-mobile/releases/steam-mobile-1.5.tar.bz2 steam-mobile-1.5.tar.bz2]
 
 = Older versions =
 
-[http://code.google.com/p/pidgin-opensteamworks/downloads/list?can=1 Old Downloads Page]
+[http://pidgin-opensteamworks.googlecode.com/svn/trunk/steam-mobile/releases/ Old releases]
+[http://code.google.com/p/pidgin-opensteamworks/downloads/list?can=1 Older Downloads Page]
