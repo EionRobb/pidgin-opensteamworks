@@ -1006,9 +1006,11 @@ steam_login_access_token_cb(SteamAccount *sa, JsonObject *obj, gpointer user_dat
 static void
 steam_login_with_access_token_error_cb(SteamAccount *sa, const gchar *data, gssize data_len, gpointer user_data)
 {
-	if (g_strstr_len(data, data_len, "401 Unauthorized")) {
+	purple_debug_error("steam", "Access token login error: %s\n", data);
+	if (g_strstr_len(data, data_len, "401 Unauthorized") || g_strstr_len(data, data_len, "<title>Unauthorized</title>") || g_strstr_len(data, data_len, "<title>Forbidden</title>")) {
 		// Our access_token looks like it expired?
 		//Wipe it and try re-auth
+		purple_debug_info("steam", "Clearing expired access_token\n");
 		
 		steam_account_set_access_token(sa, NULL);
 		steam_get_rsa_key(sa);
@@ -1021,7 +1023,6 @@ steam_login_with_access_token_error_cb(SteamAccount *sa, const gchar *data, gssi
 			g_free(title_str);
 			xmlnode_free(error_response);
 		} else {
-			purple_debug_error("steam", "Access token login error: %s\n", data);
 			gchar *http_error = g_strndup(data, strchr(data, '\n') - data);
 			purple_connection_error(sa->pc, PURPLE_CONNECTION_ERROR_NETWORK_ERROR, http_error);
 			g_free(http_error);
@@ -1102,12 +1103,17 @@ steam_login_cb(SteamAccount *sa, JsonObject *obj, gpointer user_data)
 		const gchar *error_description = json_object_get_string_member(obj, "message");
 		if (json_object_get_boolean_member(obj, "emailauth_needed"))
 		{
-			purple_request_input(NULL, NULL, _("Set your Steam Guard Code"),
-						_("Copy the Steam Guard Code you will have received in your email"), NULL,
-						FALSE, FALSE, "Steam Guard Code", _("OK"),
-						G_CALLBACK(steam_set_steam_guard_token_cb), _("Cancel"),
-						NULL, sa->account, NULL, NULL, sa->account);
-			purple_connection_error(sa->pc, PURPLE_CONNECTION_ERROR_AUTHENTICATION_FAILED, error_description);
+			if (purple_account_get_string(sa->account, "steam_guard_code", NULL)) {
+				// We have a guard token set, and we need to clear it out and re-request
+				steam_set_steam_guard_token_cb(sa->account, NULL);
+			} else {
+				purple_request_input(NULL, NULL, _("Set your Steam Guard Code"),
+							_("Copy the Steam Guard Code you will have received in your email"), NULL,
+							FALSE, FALSE, "Steam Guard Code", _("OK"),
+							G_CALLBACK(steam_set_steam_guard_token_cb), _("Cancel"),
+							NULL, sa->account, NULL, NULL, sa->account);
+				purple_connection_error(sa->pc, PURPLE_CONNECTION_ERROR_AUTHENTICATION_FAILED, error_description);
+			}
 		} else if (json_object_get_boolean_member(obj, "captcha_needed"))
 		{
 			const gchar *captcha_gid = json_object_get_string_member(obj, "captcha_gid");
