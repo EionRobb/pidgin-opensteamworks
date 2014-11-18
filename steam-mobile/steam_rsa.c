@@ -53,7 +53,7 @@ pkcs1pad2(const char *data, int keysize)
 	guchar *buffer = g_new0(guchar, keysize);
 	
 	int len = strlen(data) - 1;
-	int abs_len = keysize;
+	
 	while(len >=0 && keysize > 0)
 		buffer[--keysize] = (unsigned char)data[len--];
 	buffer[--keysize] = 0;
