@@ -912,16 +912,21 @@ steam_list_emblem(PurpleBuddy *buddy)
 	
 	if (sbuddy)
 	{
-		if (sbuddy->gameextrainfo)
+		if (sbuddy->gameextrainfo || sbuddy->personastateflags & 2)
 		{
 			return "game";
 		}
-		if (sbuddy->personastateflags == 512)
+		if (sbuddy->personastateflags & 256)
+		{
+			//Web
+			return "external";
+		}
+		if (sbuddy->personastateflags & 512)
 		{
 			//Steam mobile, also Pidgin
 			return "mobile";
 		}
-		if (sbuddy->personastateflags == 1024)
+		if (sbuddy->personastateflags & 1024)
 		{
 			//Big Picture mode
 			return "hiptop";
