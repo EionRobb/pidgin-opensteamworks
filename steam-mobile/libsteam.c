@@ -259,10 +259,10 @@ steam_captcha_image_cb(PurpleUtilFetchUrlData *url_data, gpointer userdata, cons
 	group = purple_request_field_group_new(NULL);
 	purple_request_fields_add_group(fields, group);
 	
-	field = purple_request_field_image_new("captcha_image", "", response, len);
+	field = purple_request_field_image_new("captcha_image", _("Image"), response, len);
 	purple_request_field_group_add_field(group, field);
 	
-	field = purple_request_field_string_new("captcha_response", "", "", FALSE);
+	field = purple_request_field_string_new("captcha_response", _("Response"), "", FALSE);
 	purple_request_field_group_add_field(group, field);
 	
 	purple_request_fields(sa->pc, 
@@ -1048,6 +1048,9 @@ static void
 steam_set_steam_guard_token_cb(gpointer data, const gchar *steam_guard_token)
 {
 	PurpleAccount *account = data;
+	
+	if (steam_guard_token == NULL)
+		steam_guard_token = "";
 	
 	purple_account_set_string(account, "steam_guard_code", steam_guard_token);
 	
