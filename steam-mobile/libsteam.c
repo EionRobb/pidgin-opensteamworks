@@ -267,7 +267,7 @@ steam_captcha_image_cb(PurpleUtilFetchUrlData *url_data, gpointer userdata, cons
 	
 	purple_request_fields(sa->pc, 
 		_("Steam Captcha"), _("Steam Captcha"), 
-		_("Enter both words below, separated by a space"), 
+		_("Please verify you are human by typing the following"), 
 		fields, 
 		_("OK"), G_CALLBACK(steam_captcha_ok_cb), 
 		_("Logout"), G_CALLBACK(steam_captcha_cancel_cb), 
@@ -1111,10 +1111,14 @@ steam_login_cb(SteamAccount *sa, JsonObject *obj, gpointer user_data)
 		const gchar *error_description = json_object_get_string_member(obj, "message");
 		if (json_object_get_boolean_member(obj, "emailauth_needed"))
 		{
-			if (purple_account_get_string(sa->account, "steam_guard_code", NULL)) {
+			const gchar *steam_guard_code = purple_account_get_string(sa->account, "steam_guard_code", NULL);
+			if (steam_guard_code && *steam_guard_code) {
 				// We have a guard token set, and we need to clear it out and re-request
 				steam_set_steam_guard_token_cb(sa->account, NULL);
 			} else {
+				if (json_object_has_member(obj, "emailsteamid"))
+					purple_account_set_string(sa->account, "emailsteamid", json_object_get_string_member(obj, "emailsteamid"));
+				
 				purple_request_input(NULL, NULL, _("Set your Steam Guard Code"),
 							_("Copy the Steam Guard Code you will have received in your email"), NULL,
 							FALSE, FALSE, "Steam Guard Code", _("OK"),
@@ -1191,7 +1195,8 @@ steam_login_got_rsakey(SteamAccount *sa, JsonObject *obj, gpointer user_data)
 	g_string_append_printf(post, "password=%s&", purple_url_encode(encrypted_password));
 	g_string_append_printf(post, "username=%s&", purple_url_encode(account->username));
 	g_string_append_printf(post, "emailauth=%s&", purple_url_encode(purple_account_get_string(account, "steam_guard_code", "")));
-	g_string_append(post, "loginfriendlyname=libpurple&");
+	g_string_append_printf(post, "emailsteamid=%s&", purple_url_encode(purple_account_get_string(account, "emailsteamid", "")));
+	g_string_append(post, "loginfriendlyname=#login_emailauth_friendlyname_mobile&");
 	g_string_append(post, "oauth_client_id=3638BFB1&");
 	g_string_append(post, "oauth_scope=read_profile write_profile read_client write_client&");
 	
@@ -1204,18 +1209,22 @@ steam_login_got_rsakey(SteamAccount *sa, JsonObject *obj, gpointer user_data)
 		g_free(sa->captcha_text); sa->captcha_text = NULL;
 	} else {
 		g_string_append(post, "captchagid=-1&");
+		g_string_append(post, "captchatext=enter%20above%20characters&");
 	}
 	
 	if (sa->twofactorcode != NULL) {
 		g_string_append_printf(post, "twofactorcode=%s&", purple_url_encode(sa->twofactorcode));
 		g_free(sa->twofactorcode); sa->twofactorcode = NULL;
+	} else {
+		g_string_append(post, "twofactorcode=&");
 	}
 	
 	g_string_append_printf(post, "rsatimestamp=%s", purple_url_encode(json_object_get_string_member(obj, "timestamp")));
+	g_string_append(post, "remember_login=false&");
 	
 	//purple_debug_misc("steam", "Postdata: %s\n", post->str);
 	
-	steam_post_or_get(sa, STEAM_METHOD_POST | STEAM_METHOD_SSL, "steamcommunity.com", "/mobilelogin/dologin", post->str, steam_login_cb, NULL, TRUE);
+	steam_post_or_get(sa, STEAM_METHOD_POST | STEAM_METHOD_SSL, "steamcommunity.com", "/mobilelogin/dologin/", post->str, steam_login_cb, NULL, TRUE);
 	g_string_free(post, TRUE);
 	
 	g_free(encrypted_password);
