@@ -856,6 +856,77 @@ steam_get_friend_list(SteamAccount *sa)
 	g_string_free(url, TRUE);
 }
 
+static void
+steam_get_offline_history_cb(SteamAccount *sa, JsonObject *obj, gpointer user_data)
+{
+	JsonObject *response = json_object_get_object_member(obj, "response");
+	JsonArray *messages = json_object_get_array_member(response, "messages");
+	guint index;
+	gchar *who = user_data;
+	
+	for(index = json_array_get_length(messages); index > 0; index--)
+	{
+		JsonObject *message = json_array_get_object_element(messages, index - 1);
+		gint64 accountid = json_object_get_int_member(message, "accountid");
+		gint64 timestamp = json_object_get_int_member(message, "timestamp");
+		const gchar *text = json_object_get_string_member(message, "message");
+		
+		if (g_str_equal(steam_accountid_to_steamid(accountid), sa->steamid)) {
+			serv_got_im(sa->pc, who, text, PURPLE_MESSAGE_SEND, timestamp);
+		} else {
+			serv_got_im(sa->pc, who, text, PURPLE_MESSAGE_RECV, timestamp);
+		}
+	}
+	
+	g_free(who);
+}
+
+static void
+steam_get_offline_history(SteamAccount *sa, const gchar *who, gint since)
+{
+	GString *url = g_string_new("/IFriendMessagesService/GetRecentMessages/v0001?");
+	
+	g_string_append_printf(url, "access_token=%s&", purple_url_encode(steam_account_get_access_token(sa)));
+	g_string_append_printf(url, "steamid1=%s&", purple_url_encode(sa->steamid));
+	g_string_append_printf(url, "steamid2=%s&", purple_url_encode(who));
+	g_string_append_printf(url, "rtime32_start_time=%d&", since);
+	
+	steam_post_or_get(sa, STEAM_METHOD_GET | STEAM_METHOD_SSL, NULL, url->str, NULL, steam_get_offline_history_cb, g_strdup(who), TRUE);
+	
+	g_string_free(url, TRUE);
+}
+
+static void
+steam_get_conversations_cb(SteamAccount *sa, JsonObject *obj, gpointer user_data)
+{
+	JsonObject *response = json_object_get_object_member(obj, "response");
+	JsonArray *message_sessions = json_object_get_array_member(response, "message_sessions");
+	guint index;
+	
+	for(index = 0; index < json_array_get_length(message_sessions); index++)
+	{
+		JsonObject *session = json_array_get_object_element(message_sessions, index);
+		gint64 accountid_friend = json_object_get_int_member(session, "accountid_friend");
+		gint64 last_message = json_object_get_int_member(session, "last_message");
+		gint64 last_view = json_object_get_int_member(session, "last_view");
+		gint64 unread_message_count = json_object_get_int_member(session, "unread_message_count");
+		
+		if (unread_message_count > 0) {
+			steam_get_offline_history(sa, steam_accountid_to_steamid(accountid_friend), last_view);
+		}
+	}
+}
+
+static void
+steam_get_conversations(SteamAccount *sa) {
+	GString *url = g_string_new("/IFriendMessagesService/GetActiveMessageSessions/v0001?");
+	g_string_append_printf(url, "access_token=%s&", purple_url_encode(steam_account_get_access_token(sa)));
+	
+	steam_post_or_get(sa, STEAM_METHOD_GET | STEAM_METHOD_SSL, NULL, url->str, NULL, steam_get_conversations_cb, NULL, TRUE);
+	
+	g_string_free(url, TRUE);
+}
+
 /******************************************************************************/
 /* PRPL functions */
 /******************************************************************************/
@@ -1003,6 +1074,7 @@ steam_login_access_token_cb(SteamAccount *sa, JsonObject *obj, gpointer user_dat
 	purple_connection_set_state(sa->pc, PURPLE_CONNECTED);
 	
 	steam_get_friend_list(sa);
+	steam_get_conversations(sa);
 	steam_poll(sa, FALSE, 0);
 	
 	steam_fetch_new_sessionid(sa);
