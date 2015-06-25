@@ -872,7 +872,12 @@ steam_get_offline_history_cb(SteamAccount *sa, JsonObject *obj, gpointer user_da
 		const gchar *text = json_object_get_string_member(message, "message");
 		
 		if (g_str_equal(steam_accountid_to_steamid(accountid), sa->steamid)) {
-			serv_got_im(sa->pc, who, text, PURPLE_MESSAGE_SEND, timestamp);
+			PurpleConversation *conv = purple_find_conversation_with_account(PURPLE_CONV_TYPE_IM, who, sa->account);
+			if (conv == NULL)
+			{
+				conv = purple_conversation_new(PURPLE_CONV_TYPE_IM, sa->account, who);
+			}
+			purple_conversation_write(conv, who, text, PURPLE_MESSAGE_SEND, timestamp);
 		} else {
 			serv_got_im(sa->pc, who, text, PURPLE_MESSAGE_RECV, timestamp);
 		}
