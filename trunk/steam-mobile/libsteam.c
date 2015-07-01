@@ -547,7 +547,7 @@ steam_poll_cb(SteamAccount *sa, JsonObject *obj, gpointer user_data)
 	{
 		JsonObject *message = json_array_get_object_element(messages, index);
 		const gchar *type = json_object_get_string_member(message, "type");
-		purple_debug_info("steam", "new message of type %s\n", type);
+		
 		if (g_str_equal(type, "typing"))
 		{
 			serv_got_typing(sa->pc, json_object_get_string_member(message, "steamid_from"), 20, PURPLE_TYPING);
@@ -619,14 +619,19 @@ steam_poll_cb(SteamAccount *sa, JsonObject *obj, gpointer user_data)
 			gchar *has_left_msg = g_strdup_printf("%s has left the conversation", alias ? alias : "User");
 			purple_conversation_write(conv, "", has_left_msg, PURPLE_MESSAGE_SYSTEM, time(NULL));
 			g_free(has_left_msg);
+		} else {
+			purple_debug_error("steam", "unknown message type %s\n", type);
 		}
 	}
+	
+	purple_account_set_int(sa->account, "last_message_timestamp", sa->last_message_timestamp);
 	
 	if (json_object_has_member(obj, "messagelast"))
 		sa->message = MAX(sa->message, (guint) json_object_get_int_member(obj, "messagelast"));
 	
 	if (json_object_has_member(obj, "error") && g_str_equal(json_object_get_string_member(obj, "error"), "Not Logged On"))
 	{
+		g_string_free(users_to_update, TRUE);
 		purple_connection_error(sa->pc, PURPLE_CONNECTION_ERROR_NETWORK_ERROR, _("Reconnect needed"));
 	}
 	
@@ -916,8 +921,8 @@ steam_get_conversations_cb(SteamAccount *sa, JsonObject *obj, gpointer user_data
 		gint64 last_view = json_object_get_int_member(session, "last_view");
 		gint64 unread_message_count = json_object_get_int_member(session, "unread_message_count");
 		
-		if (unread_message_count > 0) {
-			steam_get_offline_history(sa, steam_accountid_to_steamid(accountid_friend), last_view);
+		if (last_message > sa->last_message_timestamp) {
+			steam_get_offline_history(sa, steam_accountid_to_steamid(accountid_friend), sa->last_message_timestamp);
 		}
 	}
 }
@@ -1355,6 +1360,7 @@ steam_login(PurpleAccount *account)
 	sa->hostname_ip_cache = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
 	sa->sent_messages_hash = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
 	sa->waiting_conns = g_queue_new();
+	sa->last_message_timestamp = purple_account_get_int(sa->account, "last_message_timestamp", 0);
 
 #ifdef G_OS_UNIX
 	if(core_is_haze) {
