@@ -1771,7 +1771,7 @@ static void plugin_init(PurplePlugin *plugin)
 
 	option = purple_account_option_bool_new(
 		_("Always use HTTPS"),
-		"always_use_https", FALSE);
+		"always_use_https", TRUE);
 	prpl_info->protocol_options = g_list_append(
 		prpl_info->protocol_options, option);
 
