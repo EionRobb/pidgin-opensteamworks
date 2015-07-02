@@ -912,6 +912,10 @@ steam_get_conversations_cb(SteamAccount *sa, JsonObject *obj, gpointer user_data
 	JsonObject *response = json_object_get_object_member(obj, "response");
 	JsonArray *message_sessions = json_object_get_array_member(response, "message_sessions");
 	guint index;
+	gint last_message_stored_timestamp = purple_account_get_int(sa->account, "last_message_timestamp", 0);
+	
+	if (last_message_stored_timestamp <= 0)
+		return;
 	
 	for(index = 0; index < json_array_get_length(message_sessions); index++)
 	{
@@ -921,8 +925,8 @@ steam_get_conversations_cb(SteamAccount *sa, JsonObject *obj, gpointer user_data
 		gint64 last_view = json_object_get_int_member(session, "last_view");
 		gint64 unread_message_count = json_object_get_int_member(session, "unread_message_count");
 		
-		if (last_message > sa->last_message_timestamp) {
-			steam_get_offline_history(sa, steam_accountid_to_steamid(accountid_friend), sa->last_message_timestamp);
+		if (last_message > last_message_stored_timestamp) {
+			steam_get_offline_history(sa, steam_accountid_to_steamid(accountid_friend), last_message_stored_timestamp);
 		}
 	}
 }
@@ -1360,7 +1364,6 @@ steam_login(PurpleAccount *account)
 	sa->hostname_ip_cache = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
 	sa->sent_messages_hash = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
 	sa->waiting_conns = g_queue_new();
-	sa->last_message_timestamp = purple_account_get_int(sa->account, "last_message_timestamp", 0);
 
 #ifdef G_OS_UNIX
 	if(core_is_haze) {
