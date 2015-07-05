@@ -633,6 +633,7 @@ steam_poll_cb(SteamAccount *sa, JsonObject *obj, gpointer user_data)
 	{
 		g_string_free(users_to_update, TRUE);
 		purple_connection_error(sa->pc, PURPLE_CONNECTION_ERROR_NETWORK_ERROR, _("Reconnect needed"));
+		return;
 	}
 	
 	if (!secure)
