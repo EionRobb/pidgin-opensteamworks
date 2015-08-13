@@ -152,6 +152,7 @@ steam_accountid_to_steamid(gint64 accountid)
 static void steam_fetch_new_sessionid(SteamAccount *sa);
 static void steam_get_friend_summaries(SteamAccount *sa, const gchar *who);
 static void steam_get_rsa_key(SteamAccount *sa);
+static void steam_get_conversations(SteamAccount *sa);
 
 static void
 steam_friend_action(SteamAccount *sa, const gchar *who, const gchar *action)
@@ -624,7 +625,8 @@ steam_poll_cb(SteamAccount *sa, JsonObject *obj, gpointer user_data)
 		}
 	}
 	
-	purple_account_set_int(sa->account, "last_message_timestamp", sa->last_message_timestamp);
+	if (sa->last_message_timestamp > 0)
+		purple_account_set_int(sa->account, "last_message_timestamp", sa->last_message_timestamp);
 	
 	if (json_object_has_member(obj, "messagelast"))
 		sa->message = MAX(sa->message, (guint) json_object_get_int_member(obj, "messagelast"));
@@ -840,6 +842,8 @@ steam_get_friend_list_cb(SteamAccount *sa, JsonObject *obj, gpointer user_data)
 		steam_get_friend_summaries(sa, users_to_fetch);
 	}
 	g_free(users_to_fetch);
+	
+	steam_get_conversations(sa);
 }
 
 static void
@@ -869,6 +873,7 @@ steam_get_offline_history_cb(SteamAccount *sa, JsonObject *obj, gpointer user_da
 	JsonArray *messages = json_object_get_array_member(response, "messages");
 	guint index;
 	gchar *who = user_data;
+	gint last_message_stored_timestamp = purple_account_get_int(sa->account, "last_message_timestamp", 0);
 	
 	for(index = json_array_get_length(messages); index > 0; index--)
 	{
@@ -876,6 +881,9 @@ steam_get_offline_history_cb(SteamAccount *sa, JsonObject *obj, gpointer user_da
 		gint64 accountid = json_object_get_int_member(message, "accountid");
 		gint64 timestamp = json_object_get_int_member(message, "timestamp");
 		const gchar *text = json_object_get_string_member(message, "message");
+		
+		if (timestamp < last_message_stored_timestamp)
+			continue;
 		
 		if (g_str_equal(steam_accountid_to_steamid(accountid), sa->steamid)) {
 			PurpleConversation *conv = purple_find_conversation_with_account(PURPLE_CONV_TYPE_IM, who, sa->account);
@@ -1089,7 +1097,6 @@ steam_login_access_token_cb(SteamAccount *sa, JsonObject *obj, gpointer user_dat
 	purple_connection_set_state(sa->pc, PURPLE_CONNECTED);
 	
 	steam_get_friend_list(sa);
-	steam_get_conversations(sa);
 	steam_poll(sa, FALSE, 0);
 	
 	steam_fetch_new_sessionid(sa);
@@ -1365,6 +1372,7 @@ steam_login(PurpleAccount *account)
 	sa->hostname_ip_cache = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
 	sa->sent_messages_hash = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
 	sa->waiting_conns = g_queue_new();
+	sa->last_message_timestamp = purple_account_get_int(sa->account, "last_message_timestamp", 0);
 
 #ifdef G_OS_UNIX
 	if(core_is_haze) {
@@ -1522,7 +1530,7 @@ static gint steam_send_im(PurpleConnection *pc, const gchar *who, const gchar *m
 	g_string_append_printf(post, "access_token=%s&", purple_url_encode(steam_account_get_access_token(sa)));
 	g_string_append_printf(post, "umqid=%s&", purple_url_encode(sa->umqid));
 	
-	stripped = purple_unescape_html(msg);
+	stripped = purple_markup_strip_html(msg);
 	g_string_append(post, "type=saytext&");
 	g_string_append_printf(post, "text=%s&", purple_url_encode(stripped));
 	g_string_append_printf(post, "steamid_dst=%s", who);
