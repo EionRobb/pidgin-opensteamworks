@@ -216,11 +216,6 @@ steam_fetch_new_sessionid(SteamAccount *sa)
 	gchar *steamLogin;
 	
 	steamLogin = g_strconcat(sa->steamid, "||oauth:", steam_account_get_access_token(sa), NULL);
-	
-	g_hash_table_replace(sa->cookie_table, g_strdup("forceMobile"), g_strdup("1"));
-	g_hash_table_replace(sa->cookie_table, g_strdup("mobileClient"), g_strdup("ios"));
-	g_hash_table_replace(sa->cookie_table, g_strdup("mobileClientVersion"), g_strdup("1291812"));
-	g_hash_table_replace(sa->cookie_table, g_strdup("Steam_Language"), g_strdup("english"));
 	g_hash_table_replace(sa->cookie_table, g_strdup("steamLogin"), steamLogin);
 	
 	steam_post_or_get(sa, STEAM_METHOD_GET | STEAM_METHOD_SSL, "steamcommunity.com", "/mobilesettings/GetManifest/v0001", NULL, steam_fetch_new_sessionid_cb, NULL, FALSE);
@@ -1369,6 +1364,12 @@ steam_login(PurpleAccount *account)
 	sa->account = account;
 	sa->pc = pc;
 	sa->cookie_table = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
+	
+	g_hash_table_replace(sa->cookie_table, g_strdup("forceMobile"), g_strdup("1"));
+	g_hash_table_replace(sa->cookie_table, g_strdup("mobileClient"), g_strdup("ios"));
+	g_hash_table_replace(sa->cookie_table, g_strdup("mobileClientVersion"), g_strdup("1291812"));
+	g_hash_table_replace(sa->cookie_table, g_strdup("Steam_Language"), g_strdup("english"));
+	
 	sa->hostname_ip_cache = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
 	sa->sent_messages_hash = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
 	sa->waiting_conns = g_queue_new();
