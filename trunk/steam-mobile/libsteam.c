@@ -731,7 +731,7 @@ steam_got_friend_summaries(SteamAccount *sa, JsonObject *obj, gpointer user_data
 		
 		// Optional :
 		g_free(sbuddy->gameid); sbuddy->gameid = json_object_has_member(player, "gameid") ? g_strdup(json_object_get_string_member(player, "gameid")) : NULL;
-		g_free(sbuddy->gameextrainfo); sbuddy->gameextrainfo = json_object_has_member(player, "gameextrainfo") ? g_strdup(json_object_get_string_member(player, "gameextrainfo")) : NULL;
+		g_free(sbuddy->gameextrainfo); sbuddy->gameextrainfo = json_object_has_member(player, "gameextrainfo") ? purple_utf8_salvage(json_object_get_string_member(player, "gameextrainfo")) : NULL;
 		g_free(sbuddy->gameserversteamid); sbuddy->gameserversteamid = json_object_has_member(player, "gameserversteamid") ? g_strdup(json_object_get_string_member(player, "gameserversteamid")) : NULL;
 		g_free(sbuddy->lobbysteamid); sbuddy->lobbysteamid = json_object_has_member(player, "lobbysteamid") ? g_strdup(json_object_get_string_member(player, "lobbysteamid")) : NULL;
 		g_free(sbuddy->gameserverip); sbuddy->gameserverip = json_object_has_member(player, "gameserverip") ? g_strdup(json_object_get_string_member(player, "gameserverip")) : NULL;
