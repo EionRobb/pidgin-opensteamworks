@@ -1183,7 +1183,7 @@ steam_login_cb(SteamAccount *sa, JsonObject *obj, gpointer user_data)
 		JsonParser *parser = json_parser_new();
 		const gchar *oauthjson = json_object_get_string_member(obj, "oauth");
 		
-		if (!json_parser_load_from_data(parser, oauthjson, strlen(oauthjson), NULL))
+		if (!json_parser_load_from_data(parser, oauthjson, -1, NULL))
 		{
 			purple_debug_error("steam", "Error parsing response: %s\n", oauthjson);
 			purple_connection_error(sa->pc, PURPLE_CONNECTION_ERROR_NETWORK_ERROR, "JSON decoding error");
