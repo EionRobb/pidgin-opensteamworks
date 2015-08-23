@@ -5,9 +5,11 @@ As of version 1.0 the (new) plugin will connect to Steam *without Steam running*
 Versions less than 1.0 of this plugin use [Open Steamworks](http://opensteamworks.org/) to connect to a running copy of Steam.
 
 Download .dll's and .so's for your system at the [Downloads Page](https://github.com/EionRobb/pidgin-opensteamworks/releases)
+
 Download the Adium plugin from [adiumxtras.com](http://adiumxtras.com/index.php?a=xtras&xtra_id=8339)
 
 Changes:
+  * v1.6 - Fixes logins and crashes for UTF8 characters in game names
   * v1.5.1 - Fixes the infinite captcha login loop
   * v1.5 - Adds 'Launch/Join Game' options to buddy menu, fix sending messages with < or > in them, fix for renaming a group in the buddy list, (beta) support for captcha image and two-factor auth, better handling of expired access tokens and steam guard tokens
   * v1.4 - Display Steam nicknames, improvements to sign-in and when servers are down, display buddy status in the buddy list
