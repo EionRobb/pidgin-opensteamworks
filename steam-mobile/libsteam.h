@@ -63,7 +63,7 @@
 #define FB_MAX_MSG_RETRY 2
 
 #define STEAM_PLUGIN_ID "prpl-steam-mobile"
-#define STEAM_PLUGIN_VERSION "1.5.1"
+#define STEAM_PLUGIN_VERSION "1.6"
 
 typedef struct _SteamAccount SteamAccount;
 typedef struct _SteamBuddy SteamBuddy;
