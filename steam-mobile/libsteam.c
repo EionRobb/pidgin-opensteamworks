@@ -890,6 +890,8 @@ steam_get_offline_history_cb(SteamAccount *sa, JsonObject *obj, gpointer user_da
 		} else {
 			serv_got_im(sa->pc, who, text, PURPLE_MESSAGE_RECV, timestamp);
 		}
+		
+		sa->last_message_timestamp = timestamp;
 	}
 	
 	g_free(who);
@@ -1417,6 +1419,9 @@ static void steam_close(PurpleConnection *pc)
 	
 	purple_timeout_remove(sa->poll_timeout);
 	purple_timeout_remove(sa->watchdog_timeout);
+	
+	if (sa->last_message_timestamp > 0)
+		purple_account_set_int(sa->account, "last_message_timestamp", sa->last_message_timestamp);
 	
 	purple_debug_info("steam", "destroying %d waiting connections\n",
 					  g_queue_get_length(sa->waiting_conns));
