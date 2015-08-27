@@ -1801,6 +1801,12 @@ static void plugin_init(PurplePlugin *plugin)
 	prpl_info->protocol_options = g_list_append(
 		prpl_info->protocol_options, option);
 
+	option = purple_account_option_bool_new(
+		_("Download offline history"),
+		"download_offline_history", TRUE);
+	prpl_info->protocol_options = g_list_append(
+		prpl_info->protocol_options, option);
+
 }
 
 static PurplePluginProtocolInfo prpl_info = {
