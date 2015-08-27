@@ -839,7 +839,10 @@ steam_get_friend_list_cb(SteamAccount *sa, JsonObject *obj, gpointer user_data)
 	}
 	g_free(users_to_fetch);
 	
-	steam_get_conversations(sa);
+	if (purple_account_get_bool(sa->account, "download_offline_history", TRUE))
+	{
+		steam_get_conversations(sa);
+	}
 }
 
 static void
