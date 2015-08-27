@@ -556,7 +556,8 @@ steam_poll_cb(SteamAccount *sa, JsonObject *obj, gpointer user_data)
 				sa->message = MAX(sa->message, secure_message_id);
 			} else {
 				guint new_timestamp = (guint) json_object_get_int_member(message, "timestamp");
-				if (new_timestamp > sa->last_message_timestamp)
+				time_t real_timestamp = local_timestamp - ((server_timestamp - new_timestamp) / 1000);
+				if (real_timestamp > sa->last_message_timestamp)
 				{
 					gchar *text, *html;
 					const gchar *from;
@@ -574,14 +575,14 @@ steam_poll_cb(SteamAccount *sa, JsonObject *obj, gpointer user_data)
 						{
 							conv = purple_conversation_new(PURPLE_CONV_TYPE_IM, sa->account, from);
 						}
-						purple_conversation_write(conv, from, html, PURPLE_MESSAGE_SEND, local_timestamp - ((server_timestamp - new_timestamp) / 1000));
+						purple_conversation_write(conv, from, html, PURPLE_MESSAGE_SEND, real_timestamp);
 					} else {
-						serv_got_im(sa->pc, from, html, PURPLE_MESSAGE_RECV, local_timestamp - ((server_timestamp - new_timestamp) / 1000));
+						serv_got_im(sa->pc, from, html, PURPLE_MESSAGE_RECV, real_timestamp);
 					}
 					g_free(html);
 					g_free(text);
 					
-					sa->last_message_timestamp = new_timestamp;
+					sa->last_message_timestamp = real_timestamp;
 				}
 			}
 		} else if (g_str_equal(type, "personastate"))
@@ -891,7 +892,8 @@ steam_get_offline_history_cb(SteamAccount *sa, JsonObject *obj, gpointer user_da
 			serv_got_im(sa->pc, who, text, PURPLE_MESSAGE_RECV, timestamp);
 		}
 		
-		sa->last_message_timestamp = timestamp;
+		if (timestamp > sa->last_message_timestamp)
+			sa->last_message_timestamp = timestamp;
 	}
 	
 	g_free(who);
