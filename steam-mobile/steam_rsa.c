@@ -210,22 +210,22 @@ steam_crypt_rsa_enc(const GByteArray *mod, const GByteArray *exp, const GByteArr
   res |= gcry_mpi_scan(&empi, GCRYMPI_FMT_USG, exp->data, exp->len, NULL);
   res |= gcry_mpi_scan(&dmpi, GCRYMPI_FMT_USG, bytes->data, bytes->len, NULL);
 
-  if (G_UNLIKELY(res == 0)) {
+  if (G_LIKELY(res == 0)) {
     res  = gcry_sexp_build(&kata, NULL, "(public-key(rsa(n %m)(e %m)))", mmpi, empi);
     res |= gcry_sexp_build(&data, NULL, "(data(flags pkcs1)(value %m))", dmpi);
 
-    if (G_UNLIKELY(res == 0)) {
+    if (G_LIKELY(res == 0)) {
       res = gcry_pk_encrypt(&cata, data, kata);
 
-      if (G_UNLIKELY(res == 0)) {
+      if (G_LIKELY(res == 0)) {
         gcry_sexp_release(data);
         data = gcry_sexp_find_token(cata, "a", 0);
 
-        if (G_UNLIKELY(data != NULL)) {
+        if (G_LIKELY(data != NULL)) {
           gcry_mpi_release(dmpi);
           dmpi = gcry_sexp_nth_mpi(data, 1, GCRYMPI_FMT_USG);
 
-          if (G_UNLIKELY(dmpi != NULL)) {
+          if (G_LIKELY(dmpi != NULL)) {
             ret = g_byte_array_new();
             g_byte_array_set_size(ret, mod->len);
 
