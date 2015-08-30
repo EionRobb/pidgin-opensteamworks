@@ -1,8 +1,9 @@
 
 COMPILER = gcc
+PKG_CONFIG ?= pkg-config
 
-LIBPURPLE_CFLAGS += $(shell pkg-config --cflags glib-2.0 json-glib-1.0 purple nss gnome-keyring-1)
-LIBPURPLE_LIBS += $(shell pkg-config --libs glib-2.0 json-glib-1.0 purple nss)
+LIBPURPLE_CFLAGS += $(shell ${PKG_CONFIG} --cflags glib-2.0 json-glib-1.0 purple nss gnome-keyring-1)
+LIBPURPLE_LIBS += $(shell ${PKG_CONFIG} --libs glib-2.0 json-glib-1.0 purple nss)
 
 STEAM_SOURCES = \
 	steam_connection.c \
