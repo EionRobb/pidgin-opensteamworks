@@ -211,7 +211,7 @@ steam_encrypt_password(const gchar *modulus_str, const gchar *exponent_str, cons
 #include <openssl/engine.h>
 
 gchar *
-steam_encrypt_password_openssl(const gchar *modulus_str, const gchar *exponent_str, const gchar *password)
+steam_encrypt_password(const gchar *modulus_str, const gchar *exponent_str, const gchar *password)
 {
 	BIGNUM *bn_modulus;
 	BIGNUM *bn_exponent;
