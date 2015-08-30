@@ -13,7 +13,7 @@ password=<base64rsaencryptedpwd>&username=<steamusername>&emailauth=&captchagid=
 #undef USE_OPENSSL_CRYPTO
 #endif
 
-#if !defined USE_POLARSSL_CRYPTO && !defined USE_OPENSSL_CRYPTO && !defined USE_NSS_CRYPTO
+#if !defined USE_POLARSSL_CRYPTO && !defined USE_OPENSSL_CRYPTO && !defined USE_NSS_CRYPTO && !defined USE_GCRYPT_CRYPTO
 #define USE_NSS_CRYPTO
 #endif
 
@@ -136,6 +136,164 @@ steam_encrypt_password(const gchar *modulus_str, const gchar *exponent_str, cons
 	if (pubKey) SECKEY_DestroyPublicKey(pubKey);
 	
 	return output;
+}
+
+#elif defined USE_GCRYPT_CRYPTO
+
+#include <gcrypt.h>
+#include <string.h>
+
+// The following functions steam_util_str_hex2bytes, steam_crypt_rsa_enc and steam_encrypt_password
+// (originally steam_crypt_rsa_enc_str) have been taken directly from steam-util.c and steam-crypt.c
+// from the bitlbee-steam source code. The original files are released under the GNU General Public
+// License version 2 and can be found at https://github.com/jgeboski/bitlbee-steam.
+// All credit goes to the original author of bitlbee-steam, James Geboski <jgeboski@gmail.com>.
+
+GByteArray *
+steam_util_str_hex2bytes(const gchar *str)
+{
+  GByteArray *ret;
+  gboolean    hax;
+  gsize       size;
+  gchar       val;
+  guint       i;
+  guint       d;
+
+  g_return_val_if_fail(str != NULL, NULL);
+
+  size = strlen(str);
+  hax  = (size % 2) != 0;
+
+  ret = g_byte_array_new();
+  g_byte_array_set_size(ret, (size + 1) / 2);
+  memset(ret->data, 0, ret->len);
+
+  for (d = i = 0; i < size; i++, hax = !hax) {
+    val = g_ascii_xdigit_value(str[i]);
+
+    if (val < 0) {
+      g_byte_array_free(ret, TRUE);
+      return NULL;
+    }
+
+    if (hax)
+      ret->data[d++] |= val & 0x0F;
+    else
+      ret->data[d] |= (val << 4) & 0xF0;
+  }
+
+  return ret;
+}
+
+GByteArray *
+steam_crypt_rsa_enc(const GByteArray *mod, const GByteArray *exp, const GByteArray *bytes)
+{
+  GByteArray   *ret;
+  gcry_mpi_t    mmpi;
+  gcry_mpi_t    empi;
+  gcry_mpi_t    dmpi;
+  gcry_sexp_t   kata;
+  gcry_sexp_t   data;
+  gcry_sexp_t   cata;
+  gcry_error_t  res;
+  gsize         size;
+
+  g_return_val_if_fail(mod   != NULL, NULL);
+  g_return_val_if_fail(exp   != NULL, NULL);
+  g_return_val_if_fail(bytes != NULL, NULL);
+
+  mmpi = empi = dmpi = NULL;
+  kata = data = cata = NULL;
+  ret  = NULL;
+
+  res  = gcry_mpi_scan(&mmpi, GCRYMPI_FMT_USG, mod->data, mod->len, NULL);
+  res |= gcry_mpi_scan(&empi, GCRYMPI_FMT_USG, exp->data, exp->len, NULL);
+  res |= gcry_mpi_scan(&dmpi, GCRYMPI_FMT_USG, bytes->data, bytes->len, NULL);
+
+  if (G_UNLIKELY(res == 0)) {
+    res  = gcry_sexp_build(&kata, NULL, "(public-key(rsa(n %m)(e %m)))", mmpi, empi);
+    res |= gcry_sexp_build(&data, NULL, "(data(flags pkcs1)(value %m))", dmpi);
+
+    if (G_UNLIKELY(res == 0)) {
+      res = gcry_pk_encrypt(&cata, data, kata);
+
+      if (G_UNLIKELY(res == 0)) {
+        gcry_sexp_release(data);
+        data = gcry_sexp_find_token(cata, "a", 0);
+
+        if (G_UNLIKELY(data != NULL)) {
+          gcry_mpi_release(dmpi);
+          dmpi = gcry_sexp_nth_mpi(data, 1, GCRYMPI_FMT_USG);
+
+          if (G_UNLIKELY(dmpi != NULL)) {
+            ret = g_byte_array_new();
+            g_byte_array_set_size(ret, mod->len);
+
+            gcry_mpi_print(GCRYMPI_FMT_USG, ret->data, ret->len, &size, dmpi);
+
+            g_warn_if_fail(size <= mod->len);
+            g_byte_array_set_size(ret, size);
+          } else {
+            g_warn_if_reached();
+          }
+        } else {
+          g_warn_if_reached();
+        }
+      }
+    }
+  }
+
+  gcry_sexp_release(cata);
+  gcry_sexp_release(data);
+  gcry_sexp_release(kata);
+
+  gcry_mpi_release(dmpi);
+  gcry_mpi_release(empi);
+  gcry_mpi_release(mmpi);
+
+  return ret;
+}
+
+gchar *
+steam_encrypt_password(const gchar *mod, const gchar *exp, const gchar *str)
+{
+  GByteArray *bytes;
+  GByteArray *mytes;
+  GByteArray *eytes;
+  GByteArray *enc;
+  gchar      *ret;
+
+  g_return_val_if_fail(mod != NULL, NULL);
+  g_return_val_if_fail(exp != NULL, NULL);
+  g_return_val_if_fail(str != NULL, NULL);
+
+  mytes = steam_util_str_hex2bytes(mod);
+
+  if (G_UNLIKELY(mytes == NULL))
+    return NULL;
+
+  eytes = steam_util_str_hex2bytes(exp);
+
+  if (G_UNLIKELY(eytes == NULL)) {
+    g_byte_array_free(mytes, TRUE);
+    return NULL;
+  }
+
+  bytes = g_byte_array_new();
+  g_byte_array_append(bytes, (guint8*) str, strlen(str));
+  enc = steam_crypt_rsa_enc(mytes, eytes, bytes);
+
+  g_byte_array_free(bytes, TRUE);
+  g_byte_array_free(eytes, TRUE);
+  g_byte_array_free(mytes, TRUE);
+
+  if (G_UNLIKELY(enc == NULL))
+    return NULL;
+
+  ret = g_base64_encode(enc->data, enc->len);
+  g_byte_array_free(enc, TRUE);
+
+  return ret;
 }
 
 #elif defined USE_POLARSSL_CRYPTO
