@@ -13,7 +13,7 @@ password=<base64rsaencryptedpwd>&username=<steamusername>&emailauth=&captchagid=
 #undef USE_OPENSSL_CRYPTO
 #endif
 
-#if !defined USE_POLARSSL_CRYPTO && !defined USE_OPENSSL_CRYPTO && !defined USE_NSS_CRYPTO && !defined USE_GCRYPT_CRYPTO
+#if !defined USE_MBEDTLS_CRYPTO && !defined USE_OPENSSL_CRYPTO && !defined USE_NSS_CRYPTO && !defined USE_GCRYPT_CRYPTO
 #define USE_NSS_CRYPTO
 #endif
 
@@ -296,56 +296,57 @@ steam_encrypt_password(const gchar *mod, const gchar *exp, const gchar *str)
   return ret;
 }
 
-#elif defined USE_POLARSSL_CRYPTO
+#elif defined USE_MBEDTLS_CRYPTO
 
-#include "polarssl/config.h"
-#include "polarssl/rsa.h"
-#include "polarssl/entropy.h"
-#include "polarssl/ctr_drbg.h"
+#include "mbedtls/config.h"
+#include "mbedtls/rsa.h"
+#include "mbedtls/entropy.h"
+#include "mbedtls/ctr_drbg.h"
 
 gchar *
 steam_encrypt_password(const gchar *modulus_str, const gchar *exponent_str, const gchar *password)
 {
-	rsa_context rsa;
-	entropy_context entropy;
-	ctr_drbg_context ctr_drbg;
+	mbedtls_rsa_context rsa;
+	mbedtls_entropy_context entropy;
+	mbedtls_ctr_drbg_context ctr_drbg;
 	int ret;
 	guchar *encrypted_password;
 	gchar *output;
 
 	// Init entropy context
-	entropy_init(&entropy);
-	ret = ctr_drbg_init(&ctr_drbg, entropy_func, &entropy, NULL, 0);
+	mbedtls_entropy_init(&entropy);
+	mbedtls_ctr_drbg_init(&ctr_drbg);
 
+	ret = mbedtls_ctr_drbg_seed(&ctr_drbg, mbedtls_entropy_func, &entropy, NULL, 0);
 	if (ret != 0) {
-		purple_debug_error("steam", "RSA init failed, error=%d\n", ret);
+		purple_debug_error("steam", "failed to init entropy context, error=%d\n", ret);
 		return NULL;
 	}
 
-	// Init polarssl rsa
-	rsa_init(&rsa, RSA_PKCS_V15, 0);
+	// Init mbedtls rsa
+	mbedtls_rsa_init(&rsa, MBEDTLS_RSA_PKCS_V15, 0);
 
 	// Read modulus
-	ret = mpi_read_string(&rsa.N, 16, modulus_str);
+	ret = mbedtls_mpi_read_string(&rsa.N, 16, modulus_str);
 	if (ret != 0) {
 		purple_debug_error("steam", "modulus parsing failed, error=%d\n", ret);
 		return NULL;
 	}
 
 	// Read exponent
-	ret = mpi_read_string(&rsa.E, 16, exponent_str);
+	ret = mbedtls_mpi_read_string(&rsa.E, 16, exponent_str);
 	if (ret != 0) {
 		purple_debug_error("steam", "exponent parsing failed, error=%d\n", ret);
 		return NULL;
 	}
 
 	// Set RSA key length
-	rsa.len = ( mpi_msb( &rsa.N ) + 7 ) >> 3;
+	rsa.len = (mbedtls_mpi_bitlen(&rsa.N) + 7) >> 3;
 
 	// Allocate space for encrypted password
 	encrypted_password = g_new0(guchar, rsa.len);
 
-	ret = rsa_pkcs1_encrypt(&rsa, ctr_drbg_random, &ctr_drbg, RSA_PUBLIC, strlen(password), (unsigned char*)password, encrypted_password);
+	ret = mbedtls_rsa_pkcs1_encrypt(&rsa, mbedtls_ctr_drbg_random, &ctr_drbg, MBEDTLS_RSA_PUBLIC, strlen(password), (unsigned char*)password, encrypted_password);
 
 	if (ret != 0) {
 		purple_debug_error("steam", "password encryption failed, error=%d\n", ret);
