@@ -21,7 +21,7 @@ How to Build on Linux
 =====================
   * Download the latest tarball from the [Downloads Page](https://github.com/EionRobb/pidgin-opensteamworks/releases)
   * Make sure you have the development packages/headers for libpurple, glib-2.0, libjson-glib
-  * Run `make && make install`
+  * Run `cd steam-mobile && make && sudo make install`
 
 Changelog
 =========
