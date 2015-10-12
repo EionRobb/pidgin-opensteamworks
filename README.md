@@ -20,11 +20,12 @@ If this is the first time you have downloaded this plugin:
 How to Build on Linux
 =====================
   * Download the latest tarball from the [Downloads Page](https://github.com/EionRobb/pidgin-opensteamworks/releases)
-  * Make sure you have the development packages/headers for libpurple, glib-2.0, libjson-glib
+  * Make sure you have the development packages/headers for libpurple, glib-2.0, libjson-glib, gnome-keyring
   * Run `cd steam-mobile && make && sudo make install`
 
 Changelog
 =========
+  * v1.6.1 - Fix for repeated offline history
   * v1.6 - Fixes logins and crashes for UTF8 characters in game names, downloads offline history
   * v1.5.1 - Fixes the infinite captcha login loop
   * v1.5 - Adds 'Launch/Join Game' options to buddy menu, fix sending messages with < or > in them, fix for renaming a group in the buddy list, (beta) support for captcha image and two-factor auth, better handling of expired access tokens and steam guard tokens
