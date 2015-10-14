@@ -27,7 +27,6 @@ BuildRequires: gcc
 Requires: libpurple
 Requires: json-glib
 Requires: nss
-Requires: gnome-keyring
 
 %package -n pidgin-%{plugin_name}
 Summary: Adds pixmaps, icons and smileys for Steam protocol.
