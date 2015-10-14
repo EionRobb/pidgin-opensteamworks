@@ -22,9 +22,9 @@ How to Build RPM package for Fedora/openSUSE/CentOS/RHEL
   ```
   sudo yum -y install rpm-build gcc json-glib-devel libpurple-devel zlib-devel make automake glib2-devel libgnome-keyring-devel
   mkdir -p ~/rpmbuild/{BUILD,BUILDROOT,RPMS,SOURCES,SPECS,SRPMS}
-  wget https://github.com/EionRobb/pidgin-opensteamworks/blob/master/steam-mobile/purple-steam.spec -O ~/rpmbuild/SPECS/purple-steam.spec
+  wget https://github.com/EionRobb/pidgin-opensteamworks/blob/master/steam-mobile/purple-libsteam.spec -O ~/rpmbuild/SPECS/purple-libsteam.spec
   wget https://github.com/EionRobb/pidgin-opensteamworks/archive/master.tar.gz -O ~/rpmbuild/SOURCES/pidgin-opensteamworks-1.6.1.tar.gz
-  rpmbuild -ba ~/rpmbuild/SPECS/purple-steam.spec
+  rpmbuild -ba ~/rpmbuild/SPECS/purple-libsteam.spec
   ```
 
 How to Build on Linux
