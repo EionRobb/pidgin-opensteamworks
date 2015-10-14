@@ -17,6 +17,16 @@ How to Install on Windows
 If this is the first time you have downloaded this plugin:
   * Download [the json-glib library](https://github.com/EionRobb/pidgin-opensteamworks/raw/master/steam-mobile/libjson-glib-1.0.dll) into your `Program Files (x86)\Pidgin` folder (or `Program Files\Pidgin`), _**NOT** into the plugins folder_
 
+How to Build RPM package for Fedora/openSUSE/CentOS/RHEL
+=====================
+  ```
+  sudo yum -y install rpm-build gcc json-glib-devel libpurple-devel zlib-devel make automake glib2-devel libgnome-keyring-devel
+  mkdir -p ~/rpmbuild/{BUILD,BUILDROOT,RPMS,SOURCES,SPECS,SRPMS}
+  wget https://github.com/EionRobb/pidgin-opensteamworks/blob/master/steam-mobile/purple-steam.spec -O ~/rpmbuild/SPECS/purple-steam.spec
+  wget https://github.com/EionRobb/pidgin-opensteamworks/archive/master.tar.gz -O ~/rpmbuild/SOURCES/pidgin-opensteamworks-1.6.1.tar.gz
+  rpmbuild -ba ~/rpmbuild/SPECS/purple-steam.spec
+  ```
+
 How to Build on Linux
 =====================
   * Download the latest tarball from the [Downloads Page](https://github.com/EionRobb/pidgin-opensteamworks/releases)
