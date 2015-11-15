@@ -1151,12 +1151,13 @@ steam_set_steam_guard_token_cb(gpointer data, const gchar *steam_guard_token)
 	SteamAccount *sa = data;
 
 	if (steam_guard_token && *steam_guard_token) {
-	  purple_account_set_string(sa->account, "steam_guard_code", steam_guard_token);
-	  steam_get_rsa_key(sa);
-  } else {
+		purple_account_set_string(sa->account, "steam_guard_code", steam_guard_token);
+		steam_get_rsa_key(sa);
+	} else {
+		purple_account_set_string(sa->account, "steam_guard_code", "");
 		purple_connection_error_reason(sa->pc, PURPLE_CONNECTION_ERROR_AUTHENTICATION_FAILED,
 		"Could not authenticate steam-guard code.");
-  }
+	}
 }
 
 static void
@@ -1207,7 +1208,7 @@ steam_login_cb(SteamAccount *sa, JsonObject *obj, gpointer user_data)
 			const gchar *steam_guard_code = purple_account_get_string(sa->account, "steam_guard_code", NULL);
 			if (steam_guard_code && *steam_guard_code) {
 				// We have a guard token set, and we need to clear it out and re-request
-				steam_set_steam_guard_token_cb(sa->account, NULL);
+				steam_set_steam_guard_token_cb(sa, NULL);
 			} else {
 				if (json_object_has_member(obj, "emailsteamid"))
 					purple_account_set_string(sa->account, "emailsteamid", json_object_get_string_member(obj, "emailsteamid"));
@@ -1244,7 +1245,7 @@ steam_login_cb(SteamAccount *sa, JsonObject *obj, gpointer user_data)
 		{
 			if (g_str_equal(error_description, "SteamGuard"))
 			{
-				steam_set_steam_guard_token_cb(sa->account, NULL);
+				steam_set_steam_guard_token_cb(sa, NULL);
 			} else {
 				purple_connection_error(sa->pc, PURPLE_CONNECTION_ERROR_AUTHENTICATION_FAILED, error_description);
 			}
