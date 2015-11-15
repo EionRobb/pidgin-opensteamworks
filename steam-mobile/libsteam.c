@@ -1148,18 +1148,15 @@ steam_login_with_access_token(SteamAccount *sa)
 static void
 steam_set_steam_guard_token_cb(gpointer data, const gchar *steam_guard_token)
 {
-	PurpleAccount *account = data;
+	SteamAccount *sa = data;
 
-	if (steam_guard_token == NULL)
-		steam_guard_token = "";
-
-	purple_account_set_string(account, "steam_guard_code", steam_guard_token);
-
-	if (!purple_account_get_enabled(account, purple_core_get_ui())) {
-		purple_account_set_enabled(account, purple_core_get_ui(), TRUE);
-	} else {
-		purple_account_connect(account);
-	}
+	if (steam_guard_token && *steam_guard_token) {
+	  purple_account_set_string(sa->account, "steam_guard_code", steam_guard_token);
+	  steam_get_rsa_key(sa);
+  } else {
+		purple_connection_error_reason(sa->pc, PURPLE_CONNECTION_ERROR_AUTHENTICATION_FAILED,
+		"Could not authenticate steam-guard code.");
+  }
 }
 
 static void
@@ -1215,11 +1212,12 @@ steam_login_cb(SteamAccount *sa, JsonObject *obj, gpointer user_data)
 				if (json_object_has_member(obj, "emailsteamid"))
 					purple_account_set_string(sa->account, "emailsteamid", json_object_get_string_member(obj, "emailsteamid"));
 
-				purple_request_input(NULL, NULL, _("Set your Steam Guard Code"),
+				purple_request_input(sa->pc, NULL, _("Set your Steam Guard Code"),
 							_("Copy the Steam Guard Code you will have received in your email"), NULL,
 							FALSE, FALSE, "Steam Guard Code", _("OK"),
 							G_CALLBACK(steam_set_steam_guard_token_cb), _("Cancel"),
-							NULL, sa->account, NULL, NULL, sa->account);
+							G_CALLBACK(steam_set_steam_guard_token_cb), sa->account,
+							NULL, NULL, sa);
 			}
 		} else if (json_object_get_boolean_member(obj, "captcha_needed"))
 		{
