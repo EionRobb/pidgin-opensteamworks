@@ -1220,7 +1220,6 @@ steam_login_cb(SteamAccount *sa, JsonObject *obj, gpointer user_data)
 							FALSE, FALSE, "Steam Guard Code", _("OK"),
 							G_CALLBACK(steam_set_steam_guard_token_cb), _("Cancel"),
 							NULL, sa->account, NULL, NULL, sa->account);
-				purple_connection_error(sa->pc, PURPLE_CONNECTION_ERROR_AUTHENTICATION_FAILED, error_description);
 			}
 		} else if (json_object_get_boolean_member(obj, "captcha_needed"))
 		{
