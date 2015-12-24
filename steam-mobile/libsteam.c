@@ -1134,14 +1134,19 @@ steam_login_with_access_token_error_cb(SteamAccount *sa, const gchar *data, gssi
 static void
 steam_login_with_access_token(SteamAccount *sa)
 {
-	gchar *postdata;
+	GString *postdata = g_string_new(NULL);
 	SteamConnection *sconn;
 
-	postdata = g_strdup_printf("access_token=%s", purple_url_encode(steam_account_get_access_token(sa)));
+	g_string_append_printf(postdata, "access_token=%s&", purple_url_encode(steam_account_get_access_token(sa)));
+	if (purple_account_get_string(sa->account, "ui_mode", NULL)) {
+		g_string_append_printf(postdata, "ui_mode=%s", purple_url_encode(purple_account_get_string(sa->account, "ui_mode", "mobile")));
+	}
+	
 	//TODO, handle a 401 response from the server - trash the steamguard and access_token
-	sconn = steam_post_or_get(sa, STEAM_METHOD_POST | STEAM_METHOD_SSL, NULL, "/ISteamWebUserPresenceOAuth/Logon/v0001", postdata, steam_login_access_token_cb, NULL, TRUE);
-	g_free(postdata);
+	sconn = steam_post_or_get(sa, STEAM_METHOD_POST | STEAM_METHOD_SSL, NULL, "/ISteamWebUserPresenceOAuth/Logon/v0001", postdata->str, steam_login_access_token_cb, NULL, TRUE);
 
+	g_string_free(postdata, TRUE);
+	
 	sconn->error_callback = steam_login_with_access_token_error_cb;
 }
 
@@ -1783,6 +1788,8 @@ static void plugin_init(PurplePlugin *plugin)
 	PurpleAccountOption *option;
 	PurplePluginInfo *info = plugin->info;
 	PurplePluginProtocolInfo *prpl_info = info->extra_info;
+	GList *ui_mode_list = NULL;
+	PurpleKeyValuePair *kvp;
 
 	option = purple_account_option_string_new(
 		_("Steam Guard Code"),
@@ -1805,6 +1812,22 @@ static void plugin_init(PurplePlugin *plugin)
 	option = purple_account_option_bool_new(
 		_("Download offline history"),
 		"download_offline_history", TRUE);
+	prpl_info->protocol_options = g_list_append(
+		prpl_info->protocol_options, option);
+
+	kvp = g_new0(PurpleKeyValuePair, 1);
+	kvp->key = g_strdup(_("Mobile"));
+	kvp->value = g_strdup("mobile");
+	ui_mode_list = g_list_append(ui_mode_list, kvp);
+
+	kvp = g_new0(PurpleKeyValuePair, 1);
+	kvp->key = g_strdup(_("Web"));
+	kvp->value = g_strdup("web");
+	ui_mode_list = g_list_append(ui_mode_list, kvp);
+	
+	option = purple_account_option_list_new(
+		_("Identify as"),
+		"ui_mode", ui_mode_list);
 	prpl_info->protocol_options = g_list_append(
 		prpl_info->protocol_options, option);
 
