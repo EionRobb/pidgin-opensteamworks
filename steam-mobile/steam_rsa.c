@@ -9,12 +9,16 @@ password=<base64rsaencryptedpwd>&username=<steamusername>&emailauth=&captchagid=
 
 */
 
-#if defined USE_OPENSSL_CRYPTO && !defined __APPLE__
-#undef USE_OPENSSL_CRYPTO
+#if defined USE_OPENSSL_CRYPTO && !(defined __APPLE__ || defined __FreeBSD__ || defined __OpenBSD__)
+#	undef USE_OPENSSL_CRYPTO
 #endif
 
 #if !defined USE_MBEDTLS_CRYPTO && !defined USE_OPENSSL_CRYPTO && !defined USE_NSS_CRYPTO && !defined USE_GCRYPT_CRYPTO
-#define USE_NSS_CRYPTO
+#	ifdef _WIN32
+#		define USE_WIN32_CRYPTO
+#	else
+#		define USE_NSS_CRYPTO
+#	endif
 #endif
 
 #ifdef USE_NSS_CRYPTO
@@ -358,6 +362,143 @@ steam_encrypt_password(const gchar *modulus_str, const gchar *exponent_str, cons
 	g_free(encrypted_password);
 
 	return output;
+}
+
+#elif defined USE_WIN32_CRYPTO
+
+#include <windows.h>
+#define _CRT_SECURE_NO_WARNINGS
+#include <wincrypt.h>
+#include <tchar.h>
+#define SECURITY_WIN32
+#include <security.h>
+
+gchar *
+steam_encrypt_password(const gchar *modulus_str, const gchar *exponent_str, const gchar *password)
+{
+	DWORD cchModulus = (DWORD)strlen(modulus_str);
+	int i;
+	BYTE *pbBuffer = 0;
+	BYTE *pKeyBlob = 0;
+	HCRYPTKEY phKey = 0;
+	HCRYPTPROV hCSP = 0;
+	
+	// convert hex string to byte array
+	DWORD cbLen = 0, dwSkip = 0, dwFlags = 0;
+	if (!CryptStringToBinaryA(modulus_str, cchModulus, CRYPT_STRING_HEX, NULL, &cbLen, &dwSkip, &dwFlags))
+	{
+		purple_debug_error("steam", "password encryption failed, cant get length of modulus, error=%d\n", GetLastError());
+		return NULL;
+	}
+	
+	// allocate a new buffer.
+	pbBuffer = (BYTE*)malloc(cbLen);
+	if (!CryptStringToBinaryA(modulus_str, cchModulus, CRYPT_STRING_HEX, pbBuffer, &cbLen, &dwSkip, &dwFlags))
+	{
+		purple_debug_error("steam", "password encryption failed, cant get modulus, error=%d\n", GetLastError());
+		free(pbBuffer);
+		return NULL;
+	}
+	
+	// reverse byte array
+	for (i = 0; i < (int)(cbLen / 2); ++i)
+	{
+		BYTE temp = pbBuffer[cbLen - i - 1];
+		pbBuffer[cbLen - i - 1] = pbBuffer[i];
+		pbBuffer[i] = temp;
+	}
+	
+	if (!CryptAcquireContext(&hCSP, NULL, NULL, PROV_RSA_AES, CRYPT_SILENT) &&
+			!CryptAcquireContext(&hCSP, NULL, NULL, PROV_RSA_AES, CRYPT_SILENT | CRYPT_NEWKEYSET))
+	{
+		purple_debug_error("steam", "password encryption failed, cant get a crypt context, error=%d\n", GetLastError());
+		free(pbBuffer);
+		return NULL;
+	}
+	
+	// Move the key into the key container.
+	DWORD cbKeyBlob = sizeof(PUBLICKEYSTRUC) + sizeof(RSAPUBKEY) + cbLen;
+	pKeyBlob = (BYTE*)malloc(cbKeyBlob);
+	
+	// Fill in the data.
+	PUBLICKEYSTRUC *pPublicKey = (PUBLICKEYSTRUC*)pKeyBlob;
+	pPublicKey->bType = PUBLICKEYBLOB;
+	pPublicKey->bVersion = CUR_BLOB_VERSION;  // Always use this value.
+	pPublicKey->reserved = 0;                 // Must be zero.
+	pPublicKey->aiKeyAlg = CALG_RSA_KEYX;     // RSA public-key key exchange.
+	
+	// The next block of data is the RSAPUBKEY structure.
+	RSAPUBKEY *pRsaPubKey = (RSAPUBKEY*)(pKeyBlob + sizeof(PUBLICKEYSTRUC));
+	pRsaPubKey->magic = 0x31415352; // RSA1 // Use public key
+	pRsaPubKey->bitlen = cbLen * 8;  // Number of bits in the modulus.
+	//pRsaPubKey->pubexp = 0x10001; // "010001" // Exponent.
+	pRsaPubKey->pubexp = strtol(exponent_str, NULL, 16);
+	
+	// Copy the modulus into the blob. Put the modulus directly after the
+	// RSAPUBKEY structure in the blob.
+	BYTE *pKey = (BYTE*)(((BYTE *)pRsaPubKey) + sizeof(RSAPUBKEY));
+	memcpy(pKey, pbBuffer, cbLen);
+	
+	// Now import public key       
+	if (!CryptImportKey(hCSP, pKeyBlob, cbKeyBlob, 0, 0, &phKey))
+	{
+		purple_debug_error("steam", "password encryption failed, couldnt create key, error=%d\n", GetLastError());
+		
+		free(pKeyBlob);
+		free(pbBuffer);
+		CryptReleaseContext(hCSP, 0);
+		
+		return NULL;
+	}
+	
+	DWORD dataSize = (DWORD)strlen(password);
+	DWORD encryptedSize;
+	
+	// get length of encrypted data
+	if (!CryptEncrypt(phKey, 0, TRUE, 0, NULL, &encryptedSize, dataSize))
+	{
+		purple_debug_error("steam", "password encryption failed, couldnt get length of RSA, error=%d\n", GetLastError());
+		
+		free(pKeyBlob);
+		free(pbBuffer);
+		CryptDestroyKey(phKey);
+		CryptReleaseContext(hCSP, 0);
+		
+		return NULL;
+	}
+	
+	BYTE *encryptedData = g_new0(BYTE, encryptedSize);
+	
+	// encrypt password
+	memcpy(encryptedData, password, dataSize);
+	if (!CryptEncrypt(phKey, 0, TRUE, 0, encryptedData, &dataSize, encryptedSize))
+	{
+		purple_debug_error("steam", "password encryption failed, couldnt RSA the thing, error=%d\n", GetLastError());
+		
+		free(pKeyBlob);
+		free(pbBuffer);
+		CryptDestroyKey(phKey);
+		CryptReleaseContext(hCSP, 0);
+		
+		return NULL;
+	}
+	
+	// reverse byte array again
+	for (i = 0; i < (int)(encryptedSize / 2); ++i)
+	{
+		BYTE temp = encryptedData[encryptedSize - i - 1];
+		encryptedData[encryptedSize - i - 1] = encryptedData[i];
+		encryptedData[i] = temp;
+	}
+	
+	free(pKeyBlob);
+	CryptDestroyKey(phKey);
+	free(pbBuffer);
+	CryptReleaseContext(hCSP, 0);
+	
+	gchar *ret = g_base64_encode(encryptedData, encryptedSize/2);
+	g_free(encryptedData);
+	return ret;
 }
 
 #elif defined USE_OPENSSL_CRYPTO
