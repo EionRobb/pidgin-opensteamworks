@@ -598,16 +598,19 @@ steam_poll_cb(SteamAccount *sa, JsonObject *obj, gpointer user_data)
 		{
 			const gchar *steamid = json_object_get_string_member(message, "steamid_from");
 			gint64 persona_state = json_object_get_int_member(message, "persona_state");
-			if (persona_state == 0)
-				purple_blist_remove_buddy(purple_find_buddy(sa->account, steamid));
-			else if (persona_state == 2)
-				purple_account_request_authorization(
-					sa->account, steamid, NULL,
-					NULL, NULL, TRUE,
-					steam_auth_accept_cb, steam_auth_reject_cb, purple_buddy_new(sa->account, steamid, NULL));
-			else if (persona_state == 3)
-				if (!purple_find_buddy(sa->account, steamid))
-					purple_blist_add_buddy(purple_buddy_new(sa->account, steamid, NULL), NULL, purple_find_group("Steam"), NULL);
+			
+			if (!STEAMID_IS_GROUP(steamid)) {
+				if (persona_state == 0)
+					purple_blist_remove_buddy(purple_find_buddy(sa->account, steamid));
+				else if (persona_state == 2)
+					purple_account_request_authorization(
+						sa->account, steamid, NULL,
+						NULL, NULL, TRUE,
+						steam_auth_accept_cb, steam_auth_reject_cb, purple_buddy_new(sa->account, steamid, NULL));
+				else if (persona_state == 3)
+					if (!purple_find_buddy(sa->account, steamid))
+						purple_blist_add_buddy(purple_buddy_new(sa->account, steamid, NULL), NULL, purple_find_group("Steam"), NULL);
+			}
 		} else if (g_str_equal(type, "leftconversation"))
 		{
 			const gchar *steamid = json_object_get_string_member(message, "steamid_from");
@@ -806,6 +809,10 @@ steam_get_friend_list_cb(SteamAccount *sa, JsonObject *obj, gpointer user_data)
 		JsonObject *friend = json_array_get_object_element(friends, index);
 		const gchar *steamid = json_object_get_string_member(friend, "steamid");
 		const gchar *relationship = json_object_get_string_member(friend, "relationship");
+		
+		if (STEAMID_IS_GROUP(steamid))
+			continue;
+		
 		if (g_str_equal(relationship, "friend"))
 		{
 			if (!purple_find_buddy(sa->account, steamid))
