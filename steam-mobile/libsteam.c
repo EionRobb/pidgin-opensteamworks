@@ -523,6 +523,52 @@ steam_search_users(PurplePluginAction *action)
 }
 
 static void
+steam_get_friend_summaries_internal(SteamAccount *sa, const gchar *who, SteamProxyCallbackFunc callback_func, gpointer user_data)
+{
+	GString *url;
+
+	g_return_if_fail(sa && who && *who);
+
+	url = g_string_new("/ISteamUserOAuth/GetUserSummaries/v0001?");
+	g_string_append_printf(url, "access_token=%s&", purple_url_encode(steam_account_get_access_token(sa)));
+	g_string_append_printf(url, "steamids=%s", purple_url_encode(who));
+
+	steam_post_or_get(sa, STEAM_METHOD_GET | STEAM_METHOD_SSL, NULL, url->str, NULL, callback_func, user_data, TRUE);
+
+	g_string_free(url, TRUE);
+}
+
+static void
+steam_request_add_user(SteamAccount *sa, JsonObject *obj, gpointer user_data)
+{
+	JsonArray *players = json_object_get_array_member(obj, "players");
+	PurpleBuddy *buddy = user_data;
+	guint index;
+
+	for(index = 0; index < json_array_get_length(players); index++)
+	{
+		JsonObject *player = json_array_get_object_element(players, index);
+		const gchar *steamid = json_object_get_string_member(player, "steamid");
+		const gchar *personaname;
+
+		if (!steamid || !g_str_equal(buddy->name, steamid))
+			continue; // This is not the droid we are looking for
+		
+		personaname = json_object_get_string_member(player, "personaname");
+		
+		purple_account_request_authorization(
+			sa->account, steamid, personaname,
+			NULL, NULL, TRUE,
+			steam_auth_accept_cb, steam_auth_reject_cb, buddy);
+		
+		return;
+	}
+	
+	// What?  The buddy we wanted info about wasn't in the response???
+	purple_buddy_destroy(buddy);
+}
+
+static void
 steam_poll_cb(SteamAccount *sa, JsonObject *obj, gpointer user_data)
 {
 	JsonArray *messages = NULL;
@@ -600,16 +646,18 @@ steam_poll_cb(SteamAccount *sa, JsonObject *obj, gpointer user_data)
 			gint64 persona_state = json_object_get_int_member(message, "persona_state");
 			
 			if (!STEAMID_IS_GROUP(steamid)) {
-				if (persona_state == 0)
+				if (persona_state == 0) {
 					purple_blist_remove_buddy(purple_find_buddy(sa->account, steamid));
-				else if (persona_state == 2)
-					purple_account_request_authorization(
-						sa->account, steamid, NULL,
-						NULL, NULL, TRUE,
-						steam_auth_accept_cb, steam_auth_reject_cb, purple_buddy_new(sa->account, steamid, NULL));
-				else if (persona_state == 3)
-					if (!purple_find_buddy(sa->account, steamid))
+				} else if (persona_state == 2) {
+					// Find out the name of the buddy before we display the auth request
+					steam_get_friend_summaries_internal(sa, steamid, steam_request_add_user, purple_buddy_new(sa->account, steamid, NULL));
+				} else if (persona_state == 3) {
+					if (!purple_find_buddy(sa->account, steamid)) {
 						purple_blist_add_buddy(purple_buddy_new(sa->account, steamid, NULL), NULL, purple_find_group("Steam"), NULL);
+						g_string_append_c(users_to_update, ',');
+						g_string_append(users_to_update, steamid);
+					}
+				}
 			}
 		} else if (g_str_equal(type, "leftconversation"))
 		{
@@ -766,17 +814,7 @@ steam_got_friend_summaries(SteamAccount *sa, JsonObject *obj, gpointer user_data
 static void
 steam_get_friend_summaries(SteamAccount *sa, const gchar *who)
 {
-	GString *url;
-
-	g_return_if_fail(sa && who && *who);
-
-	url = g_string_new("/ISteamUserOAuth/GetUserSummaries/v0001?");
-	g_string_append_printf(url, "access_token=%s&", purple_url_encode(steam_account_get_access_token(sa)));
-	g_string_append_printf(url, "steamids=%s", purple_url_encode(who));
-
-	steam_post_or_get(sa, STEAM_METHOD_GET | STEAM_METHOD_SSL, NULL, url->str, NULL, steam_got_friend_summaries, NULL, TRUE);
-
-	g_string_free(url, TRUE);
+	steam_get_friend_summaries_internal(sa, who, steam_got_friend_summaries, NULL);
 }
 
 static void
@@ -833,10 +871,8 @@ steam_get_friend_list_cb(SteamAccount *sa, JsonObject *obj, gpointer user_data)
 			g_free(temp);
 		} else if (g_str_equal(relationship, "requestrecipient"))
 		{
-			purple_account_request_authorization(
-					sa->account, steamid, NULL,
-					NULL, NULL, TRUE,
-					steam_auth_accept_cb, steam_auth_reject_cb, purple_buddy_new(sa->account, steamid, NULL));
+			// Find out the name of the buddy before we display the auth request
+			steam_get_friend_summaries_internal(sa, steamid, steam_request_add_user, purple_buddy_new(sa->account, steamid, NULL));
 		}
 	}
 
