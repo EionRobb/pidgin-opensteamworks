@@ -116,6 +116,6 @@ struct _SteamBuddy {
 	gchar *gameserverip;
 };
 
-#define STEAMID_IS_GROUP(id) G_UNLIKELY((((id) >> 52) & 0x0F) == 7)
+#define STEAMID_IS_GROUP(id) G_UNLIKELY(((g_ascii_strtoll((id), NULL, 10) >> 52) & 0x0F) == 7)
 
 #endif /* LIBSTEAM_H */
