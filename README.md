@@ -33,7 +33,7 @@ Now you can install packages:
 How to Build RPM package for Fedora/openSUSE/CentOS/RHEL
 =====================
   ```
-  sudo yum -y install rpm-build gcc json-glib-devel libpurple-devel zlib-devel make automake glib2-devel libgnome-keyring-devel spectool
+  sudo yum -y install rpm-build gcc json-glib-devel libpurple-devel zlib-devel make automake glib2-devel libgnome-keyring-devel nss-devel spectool
   mkdir -p ~/rpmbuild/{BUILD,BUILDROOT,RPMS,SOURCES,SPECS,SRPMS}
   wget https://github.com/EionRobb/pidgin-opensteamworks/blob/master/steam-mobile/purple-libsteam.spec -O ~/rpmbuild/SPECS/purple-libsteam.spec
   spectool --all --get-files ~/rpmbuild/SPECS/purple-libsteam.spec --directory ~/rpmbuild/SOURCES/
@@ -43,7 +43,7 @@ How to Build RPM package for Fedora/openSUSE/CentOS/RHEL
 How to Build on Linux
 =====================
   * Download the latest tarball from the [Downloads Page](https://github.com/EionRobb/pidgin-opensteamworks/releases)
-  * Make sure you have the development packages/headers for libpurple, glib-2.0, libjson-glib, gnome-keyring
+  * Make sure you have the development packages/headers for libpurple, glib-2.0, libjson-glib, gnome-keyring, nss
   * Run `cd steam-mobile && make && sudo make install`
 
 Changelog
