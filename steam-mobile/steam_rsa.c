@@ -24,7 +24,6 @@ password=<base64rsaencryptedpwd>&username=<steamusername>&emailauth=&captchagid=
 #ifdef USE_NSS_CRYPTO
 
 #include <nss.h>
-#include <base64.h>
 #include <keyhi.h>
 #include <keythi.h>
 #include <pk11pub.h>
@@ -130,9 +129,6 @@ steam_encrypt_password(const gchar *modulus_str, const gchar *exponent_str, cons
 		return NULL;
 	}
 	
-	/*tmpstr = BTOA_DataToAscii(encrypted, modlen);
-	output = g_strdup(tmpstr);
-	PORT_Free(tmpstr);*/
 	output = purple_base64_encode(encrypted, modlen);
 	
 	g_free(encrypted);
