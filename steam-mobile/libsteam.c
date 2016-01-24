@@ -255,7 +255,11 @@ steam_captcha_image_cb(PurpleUtilFetchUrlData *url_data, gpointer userdata, cons
 	group = purple_request_field_group_new(NULL);
 	purple_request_fields_add_group(fields, group);
 
+#ifdef DISPLAY_CAPTCHA_AS_URL
+	field = purple_request_field_string_new("captcha_image", _("Image url"), g_strdup_printf(STEAM_CAPTCHA_URL, sa->captcha_gid), FALSE);
+#else
 	field = purple_request_field_image_new("captcha_image", _("Image"), response, len);
+#endif
 	purple_request_field_group_add_field(group, field);
 
 	field = purple_request_field_string_new("captcha_response", _("Response"), "", FALSE);
@@ -263,7 +267,11 @@ steam_captcha_image_cb(PurpleUtilFetchUrlData *url_data, gpointer userdata, cons
 
 	purple_request_fields(sa->pc,
 		_("Steam Captcha"), _("Steam Captcha"),
+#ifdef DISPLAY_CAPTCHA_AS_URL
+		_("Paste the url in your browser and input the displayed captcha"),
+#else
 		_("Please verify you are human by typing the following"),
+#endif
 		fields,
 		_("OK"), G_CALLBACK(steam_captcha_ok_cb),
 		_("Logout"), G_CALLBACK(steam_captcha_cancel_cb),
@@ -1271,7 +1279,7 @@ steam_login_cb(SteamAccount *sa, JsonObject *obj, gpointer user_data)
 		} else if (json_object_get_boolean_member(obj, "captcha_needed"))
 		{
 			const gchar *captcha_gid = json_object_get_string_member(obj, "captcha_gid");
-			gchar *captcha_url = g_strdup_printf("https://steamcommunity.com/public/captcha.php?gid=%s", captcha_gid);
+			gchar *captcha_url = g_strdup_printf(STEAM_CAPTCHA_URL, captcha_gid);
 
 			sa->captcha_gid = g_strdup(captcha_gid);
 #if PURPLE_VERSION_CHECK(3, 0, 0)
