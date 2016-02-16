@@ -447,13 +447,14 @@ steam_encrypt_password(const gchar *modulus_str, const gchar *exponent_str, cons
 		return NULL;
 	}
 	
-	DWORD dataSize = (DWORD)strlen(password);
-	DWORD encryptedSize;
+	DWORD dataSize = strlen(password);
+	DWORD encryptedSize = dataSize;
 	
 	// get length of encrypted data
-	if (!CryptEncrypt(phKey, 0, TRUE, 0, NULL, &encryptedSize, dataSize))
+	if (!CryptEncrypt(phKey, 0, TRUE, 0, NULL, &encryptedSize, 0))
 	{
-		purple_debug_error("steam", "password encryption failed, couldnt get length of RSA, error=%d\n", GetLastError());
+		gint errorno = GetLastError();
+		purple_debug_error("steam", "password encryption failed, couldnt get length of RSA, error=%d %s\n", errorno, g_win32_error_message(errorno));
 		
 		free(pKeyBlob);
 		free(pbBuffer);
