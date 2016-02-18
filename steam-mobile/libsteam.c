@@ -1259,7 +1259,10 @@ steam_login_cb(SteamAccount *sa, JsonObject *obj, gpointer user_data)
 	} else
 	{
 		const gchar *error_description = json_object_get_string_member(obj, "message");
-		if (json_object_get_boolean_member(obj, "emailauth_needed"))
+		if (json_object_has_member(obj, "clear_password_field") && json_object_get_boolean_member(obj, "clear_password_field")) {
+			purple_account_set_password(sa->account, "");
+			purple_connection_error(sa->pc, PURPLE_CONNECTION_ERROR_AUTHENTICATION_FAILED, error_description);
+		} else if (json_object_has_member(obj, "emailauth_needed") && json_object_get_boolean_member(obj, "emailauth_needed"))
 		{
 			const gchar *steam_guard_code = purple_account_get_string(sa->account, "steam_guard_code", NULL);
 			if (steam_guard_code && *steam_guard_code) {
@@ -1276,7 +1279,15 @@ steam_login_cb(SteamAccount *sa, JsonObject *obj, gpointer user_data)
 							G_CALLBACK(steam_set_steam_guard_token_cb), sa->account,
 							NULL, NULL, sa);
 			}
-		} else if (json_object_get_boolean_member(obj, "captcha_needed"))
+		} else if (json_object_get_boolean_member(obj, "requires_twofactor"))
+		{
+			purple_request_input(sa->pc, NULL, _("Steam two-factor authentication"),
+						_("Copy the two-factor auth code you have received"), NULL,
+						FALSE, FALSE, "Two-Factor Auth Code", _("OK"),
+						G_CALLBACK(steam_set_two_factor_auth_code_cb), _("Cancel"),
+						G_CALLBACK(steam_set_two_factor_auth_code_cb), sa->account,
+						NULL, NULL, sa);
+		} else if (json_object_has_member(obj, "captcha_needed") && json_object_get_boolean_member(obj, "captcha_needed"))
 		{
 			const gchar *captcha_gid = json_object_get_string_member(obj, "captcha_gid");
 			gchar *captcha_url = g_strdup_printf(STEAM_CAPTCHA_URL, captcha_gid);
@@ -1289,14 +1300,6 @@ steam_login_cb(SteamAccount *sa, JsonObject *obj, gpointer user_data)
 #endif
 			g_free(captcha_url);
 
-		} else if (json_object_get_boolean_member(obj, "requires_twofactor"))
-		{
-			purple_request_input(sa->pc, NULL, _("Steam two-factor authentication"),
-						_("Copy the two-factor auth code you have received"), NULL,
-						FALSE, FALSE, "Two-Factor Auth Code", _("OK"),
-						G_CALLBACK(steam_set_two_factor_auth_code_cb), _("Cancel"),
-						G_CALLBACK(steam_set_two_factor_auth_code_cb), sa->account,
-						NULL, NULL, sa);
 		} else
 		{
 			if (g_str_equal(error_description, "SteamGuard"))
@@ -1369,7 +1372,7 @@ steam_login_got_rsakey(SteamAccount *sa, JsonObject *obj, gpointer user_data)
 		g_string_append(post, "twofactorcode=&");
 	}
 
-	g_string_append_printf(post, "rsatimestamp=%s", purple_url_encode(json_object_get_string_member(obj, "timestamp")));
+	g_string_append_printf(post, "rsatimestamp=%s&", purple_url_encode(json_object_get_string_member(obj, "timestamp")));
 	g_string_append(post, "remember_login=false&");
 
 	//purple_debug_misc("steam", "Postdata: %s\n", post->str);
@@ -1470,14 +1473,20 @@ static void steam_close(PurpleConnection *pc)
 	sa = pc->proto_data;
 
 	// Go offline on the website
-	post = g_string_new(NULL);
-	g_string_append_printf(post, "access_token=%s&", purple_url_encode(steam_account_get_access_token(sa)));
-	g_string_append_printf(post, "umqid=%s&", purple_url_encode(sa->umqid));
-	steam_post_or_get(sa, STEAM_METHOD_POST | STEAM_METHOD_SSL, NULL, "/ISteamWebUserPresenceOAuth/Logoff/v0001", post->str, NULL, NULL, TRUE);
-	g_string_free(post, TRUE);
+	if (sa->umqid != NULL) {
+		post = g_string_new(NULL);
+		g_string_append_printf(post, "access_token=%s&", purple_url_encode(steam_account_get_access_token(sa)));
+		g_string_append_printf(post, "umqid=%s&", purple_url_encode(sa->umqid));
+		steam_post_or_get(sa, STEAM_METHOD_POST | STEAM_METHOD_SSL, NULL, "/ISteamWebUserPresenceOAuth/Logoff/v0001", post->str, NULL, NULL, TRUE);
+		g_string_free(post, TRUE);
+	}
 
-	purple_timeout_remove(sa->poll_timeout);
-	purple_timeout_remove(sa->watchdog_timeout);
+	if (sa->poll_timeout) {
+		purple_timeout_remove(sa->poll_timeout);
+	}
+	if (sa->watchdog_timeout) {
+		purple_timeout_remove(sa->watchdog_timeout);
+	}
 
 	if (sa->last_message_timestamp > 0)
 		purple_account_set_int(sa->account, "last_message_timestamp", sa->last_message_timestamp);
