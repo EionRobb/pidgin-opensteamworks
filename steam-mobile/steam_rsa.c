@@ -14,11 +14,11 @@ password=<base64rsaencryptedpwd>&username=<steamusername>&emailauth=&captchagid=
 #endif
 
 #if !defined USE_MBEDTLS_CRYPTO && !defined USE_OPENSSL_CRYPTO && !defined USE_NSS_CRYPTO && !defined USE_GCRYPT_CRYPTO
-#	ifdef _WIN32
-#		define USE_WIN32_CRYPTO
-#	else
+// #	ifdef _WIN32
+// #		define USE_WIN32_CRYPTO
+// #	else
 #		define USE_NSS_CRYPTO
-#	endif
+// #	endif
 #endif
 
 #ifdef USE_NSS_CRYPTO
