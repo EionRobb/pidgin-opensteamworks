@@ -48,4 +48,4 @@ clean:
 	rm -f libsteam.so
 
 libsteam.so: $(STEAM_SOURCES)
-	$(CC) -Wall -I. -fPIC $(CFLAGS) $(STEAM_SOURCES) -o $@ $(LIBPURPLE_CFLAGS) $(LIBPURPLE_LIBS) -shared
+	$(CC) -Wall -I. -fPIC $(CFLAGS) $(STEAM_SOURCES) -o $@ $(LDFLAGS) $(LIBPURPLE_CFLAGS) $(LIBPURPLE_LIBS) -shared
