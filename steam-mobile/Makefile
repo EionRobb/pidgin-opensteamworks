@@ -21,6 +21,12 @@ ifeq ($(STEAM_CRYPT_BACKEND), nss)
 else ifeq ($(STEAM_CRYPT_BACKEND), gcrypt)
 	LIBPURPLE_CFLAGS += $(shell libgcrypt-config --cflags) -DUSE_GCRYPT_CRYPTO
 	LIBPURPLE_LIBS += $(shell libgcrypt-config --libs)
+else ifeq ($(STEAM_CRYPT_BACKEND), mbedtls)
+	LIBPURPLE_CFLAGS += -DUSE_MBEDTLS_CRYPTO
+	LIBPURPLE_LIBS += -lmbedtls -lmbedcrypto -lmbedx509
+else ifeq ($(STEAM_CRYPT_BACKEND), openssl)
+	LIBPURPLE_CFLAGS += $(shell ${PKG_CONFIG} --cflags openssl) -DUSE_OPENSSL_CRYPTO
+	LIBPURPLE_LIBS += $(shell ${PKG_CONFIG} --libs openssl)
 endif
 
 STEAM_SOURCES = \
