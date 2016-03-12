@@ -561,7 +561,7 @@ steam_encrypt_password(const gchar *modulus_str, const gchar *exponent_str, cons
 	{
 		unsigned long error_num = ERR_get_error();
 		char *error_str = ERR_error_string(error_num, NULL);
-		purple_debug_error("steam", error_str);
+		purple_debug_error("steam", "%s", error_str);
 		RSA_free(rsa);
 		g_free(encrypted);
 		return NULL;
