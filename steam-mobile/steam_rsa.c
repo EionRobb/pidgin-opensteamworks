@@ -9,7 +9,7 @@ password=<base64rsaencryptedpwd>&username=<steamusername>&emailauth=&captchagid=
 
 */
 
-#if defined USE_OPENSSL_CRYPTO && !(defined __APPLE__ || defined __unix__)
+#if defined USE_OPENSSL_CRYPTO && !(defined __APPLE__ || defined __OpenBSD__)
 #	undef USE_OPENSSL_CRYPTO
 #endif
 
