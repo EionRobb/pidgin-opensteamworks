@@ -9,7 +9,7 @@ password=<base64rsaencryptedpwd>&username=<steamusername>&emailauth=&captchagid=
 
 */
 
-#if defined USE_OPENSSL_CRYPTO && !(defined __APPLE__ || defined __FreeBSD__ || defined __OpenBSD__)
+#if defined USE_OPENSSL_CRYPTO && !(defined __APPLE__ || defined __unix__)
 #	undef USE_OPENSSL_CRYPTO
 #endif
 
@@ -561,7 +561,7 @@ steam_encrypt_password(const gchar *modulus_str, const gchar *exponent_str, cons
 	{
 		unsigned long error_num = ERR_get_error();
 		char *error_str = ERR_error_string(error_num, NULL);
-		purple_debug_error("steam", error_str);
+		purple_debug_error("steam", "%s", error_str);
 		RSA_free(rsa);
 		g_free(encrypted);
 		return NULL;
