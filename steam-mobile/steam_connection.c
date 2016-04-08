@@ -355,9 +355,14 @@ static void steam_post_or_get_connect_cb(gpointer data, gint source,
 
 	steamcon->fd = source;
 
-	/* TODO: Check the return value of write() */
 	len = write(steamcon->fd, steamcon->request->str,
 			steamcon->request->len);
+	if (len != steamcon->request->len)
+	{
+		purple_debug_error("steam", "post_or_get_connect failed to write request\n");
+		steam_fatal_connection_cb(steamcon);
+		return;
+	}
 	steamcon->input_watcher = purple_input_add(steamcon->fd,
 			PURPLE_INPUT_READ,
 			steam_post_or_get_readdata_cb, steamcon);
@@ -373,9 +378,14 @@ static void steam_post_or_get_ssl_connect_cb(gpointer data,
 
 	purple_debug_info("steam", "post_or_get_ssl_connect_cb\n");
 
-	/* TODO: Check the return value of write() */
 	len = purple_ssl_write(steamcon->ssl_conn,
 			steamcon->request->str, steamcon->request->len);
+	if (len != steamcon->request->len)
+	{
+		purple_debug_error("steam", "post_or_get_ssl_connect failed to write request\n");
+		steam_fatal_connection_cb(steamcon);
+		return;
+	}
 	purple_ssl_input_add(steamcon->ssl_conn,
 			steam_post_or_get_ssl_readdata_cb, steamcon);
 }

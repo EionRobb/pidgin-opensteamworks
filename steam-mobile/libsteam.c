@@ -984,8 +984,8 @@ steam_get_conversations_cb(SteamAccount *sa, JsonObject *obj, gpointer user_data
 		JsonObject *session = json_array_get_object_element(message_sessions, index);
 		gint64 accountid_friend = json_object_get_int_member(session, "accountid_friend");
 		gint64 last_message = json_object_get_int_member(session, "last_message");
-		gint64 last_view = json_object_get_int_member(session, "last_view");
-		gint64 unread_message_count = json_object_get_int_member(session, "unread_message_count");
+		//gint64 last_view = json_object_get_int_member(session, "last_view");
+		//gint64 unread_message_count = json_object_get_int_member(session, "unread_message_count");
 
 		if (last_message > last_message_stored_timestamp) {
 			steam_get_offline_history(sa, steam_accountid_to_steamid(accountid_friend), last_message_stored_timestamp);
