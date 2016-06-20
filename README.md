@@ -17,6 +17,11 @@ How to Install on Windows
 If this is the first time you have downloaded this plugin:
   * Download [the json-glib library](https://github.com/EionRobb/pidgin-opensteamworks/raw/master/steam-mobile/libjson-glib-1.0.dll) into your `Program Files (x86)\Pidgin` folder (or `Program Files\Pidgin`), _**NOT** into the plugins folder_
 
+How to install on Linux
+=======================
+  * Download the latest .so file from the [Downloads Page](https://github.com/EionRobb/pidgin-opensteamworks/releases)
+  * Copy the file to ```~/.purple/plugins```
+
 How to install on Fedora
 =====================
 On Fedora you can use [purple-libsteam](https://copr.fedoraproject.org/coprs/xvitaly/purple-libsteam/) COPR repository. [Later](https://bugzilla.redhat.com/show_bug.cgi?id=1297854), after package review, it will be available from main Fedora repository.
