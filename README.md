@@ -30,6 +30,14 @@ On Fedora you can install [package](https://apps.fedoraproject.org/packages/purp
   sudo dnf install purple-libsteam pidgin-libsteam
 ```
 
+How to install on CentOS/RHEL
+=====================
+On CentOS/RHEL you can install [package](https://apps.fedoraproject.org/packages/purple-libsteam) from Fedora's [EPEL7](http://fedoraproject.org/wiki/EPEL) repository:
+
+```
+  sudo yum install purple-libsteam pidgin-libsteam
+```
+
 How to Build RPM package for Fedora/openSUSE/CentOS/RHEL
 =====================
   ```
