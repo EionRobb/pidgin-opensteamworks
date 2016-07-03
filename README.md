@@ -24,15 +24,18 @@ How to install on Linux
 
 How to install on Fedora
 =====================
-On Fedora you can use [purple-libsteam](https://copr.fedoraproject.org/coprs/xvitaly/purple-libsteam/) COPR repository. [Later](https://bugzilla.redhat.com/show_bug.cgi?id=1297854), after package review, it will be available from main Fedora repository.
+On Fedora you can install [package](https://apps.fedoraproject.org/packages/purple-libsteam) from Fedora's main repository:
 
-At first time you should add COPR repository and enable it:
-```
-  sudo dnf copr enable xvitaly/purple-libsteam
-```
-Now you can install packages:
 ```
   sudo dnf install purple-libsteam pidgin-libsteam
+```
+
+How to install on CentOS/RHEL
+=====================
+On CentOS/RHEL you can install [package](https://apps.fedoraproject.org/packages/purple-libsteam) from Fedora's [EPEL7](http://fedoraproject.org/wiki/EPEL) repository:
+
+```
+  sudo yum install purple-libsteam pidgin-libsteam
 ```
 
 How to Build RPM package for Fedora/openSUSE/CentOS/RHEL
