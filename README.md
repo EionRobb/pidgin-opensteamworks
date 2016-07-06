@@ -48,6 +48,15 @@ How to Build RPM package for Fedora/openSUSE/CentOS/RHEL
   rpmbuild -ba ~/rpmbuild/SPECS/purple-libsteam.spec
   ```
 
+How to Build on Ubuntu
+=====================
+  * Download the latest tarball from the [Downloads Page](https://github.com/EionRobb/pidgin-opensteamworks/releases)
+  * Make sure you have the development packages/headers for libpurple, glib-2.0, libjson-glib, gnome-keyring, nss
+  * sudo apt-get install libpurple-dev libglib2.0-dev libjson-glib-dev libgnome-keyring-dev libnss3-dev
+  * Run `cd steam-mobile && make && sudo make install`
+  * sudo cp libsteam.so /usr/lib/purple-2/
+
+
 How to Build on Linux
 =====================
   * Download the latest tarball from the [Downloads Page](https://github.com/EionRobb/pidgin-opensteamworks/releases)
