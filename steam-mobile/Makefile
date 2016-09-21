@@ -38,7 +38,7 @@ STEAM_OBJS = $(patsubst %.c, %.o, $(STEAM_SOURCES))
 
 all: libsteam.so
 
-install:
+install: libsteam.so steam16.png steam22.png steam48.png
 	mkdir -m $(DIR_PERM) -p "$(DESTDIR)$(PLUGIN_DIR_PURPLE)"
 	install -m $(FILE_PERM) libsteam.so "$(DESTDIR)$(PLUGIN_DIR_PURPLE)/$(PRPL_NAME)"
 	mkdir -m $(DIR_PERM) -p "$(DESTDIR)$(DATA_ROOT_DIR_PURPLE)/pixmaps/pidgin/protocols/16"
