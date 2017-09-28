@@ -220,6 +220,37 @@ steam_friend_invite_action(SteamAccount *sa, const gchar *who, const gchar *acti
 }
 
 static void
+steam_register_game_key_text(SteamAccount *sa, const gchar *game_key)
+{
+	//Possible actions:  accept, ignore, block
+	GString *postdata = g_string_new(NULL);
+
+	g_string_append_printf(postdata, "product_key=%s&", purple_url_encode(game_key));
+	g_string_append_printf(postdata, "sessionid=%s&", purple_url_encode(sa->sessionid));
+
+	steam_post_or_get(sa, STEAM_METHOD_POST | STEAM_METHOD_SSL, "store.steampowered.com", "/account/ajaxregisterkey/", postdata->str, NULL, NULL, FALSE);
+
+	g_string_free(postdata, TRUE);
+}
+
+static void
+steam_register_game_key(PurplePluginAction *action)
+{
+	PurpleConnection *pc = (PurpleConnection *) action->context;
+	SteamAccount *sa = pc->proto_data;
+
+	purple_request_input(pc, "Activate a Product on Steam",
+					   "Redeem a Steam Key",
+					   NULL,
+					   "XXXXX-XXXXX-XXXXX", FALSE, FALSE, NULL,
+					   _("_Search"), G_CALLBACK(steam_register_game_key_text),
+					   _("_Cancel"), NULL,
+					   purple_connection_get_account(pc), NULL, NULL,
+					   sa);
+
+}
+
+static void
 steam_fetch_new_sessionid_cb(SteamAccount *sa, JsonObject *obj, gpointer user_data)
 {
 	if (g_hash_table_lookup(sa->cookie_table, "sessionid"))
@@ -1749,6 +1780,10 @@ static GList *steam_actions(PurplePlugin *plugin, gpointer context)
 
 	act = purple_plugin_action_new(_("Search for friends..."),
 			steam_search_users);
+	m = g_list_append(m, act);
+
+	act = purple_plugin_action_new(_("Redeem game key..."),
+			steam_register_game_key);
 	m = g_list_append(m, act);
 
 	return m;
