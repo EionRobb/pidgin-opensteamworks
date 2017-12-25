@@ -168,6 +168,20 @@ steam_accountid_to_steamid(gint64 accountid)
 	return steamid;
 }
 
+static const gchar *
+steam_steamid_to_accountid(const gchar *steamid)
+{
+	static gchar accountid[10];
+	gint64 steamid_int = g_ascii_strtoll(steamid, NULL, 10);
+	
+	g_return_val_if_fail(steamid_int, NULL);
+	
+	sprintf(accountid, "%" G_GINT64_FORMAT, steamid_int - G_GINT64_CONSTANT(76561197960265728));
+
+	return accountid;
+}
+
+
 static void steam_fetch_new_sessionid(SteamAccount *sa);
 static void steam_get_friend_summaries(SteamAccount *sa, const gchar *who);
 static void steam_get_rsa_key(SteamAccount *sa);
@@ -596,6 +610,62 @@ steam_get_friend_summaries_internal(SteamAccount *sa, const gchar *who, SteamPro
 	g_string_free(url, TRUE);
 }
 
+
+static void
+steam_got_friend_state(SteamAccount *sa, JsonObject *obj, gpointer user_data)
+{
+	const gchar *steamid = json_object_get_string_member(obj, "m_ulSteamID");
+	gint64 personastate = json_object_get_int_member(obj, "m_ePersonaState");
+	gchar *game_name = NULL;
+	
+	if (json_object_has_member(obj, "m_strInGameName")) {
+		game_name = purple_utf8_salvage(json_object_get_string_member(obj, "m_strInGameName"));
+	}
+	
+	if (core_is_haze) {
+		if (game_name && *game_name) {
+			purple_prpl_got_user_status(sa->account, steamid, steam_personastate_to_statustype(personastate), "message", g_markup_printf_escaped("In game %s", game_name), NULL);
+		} else {
+			purple_prpl_got_user_status(sa->account, steamid, steam_personastate_to_statustype(personastate), "message", NULL, NULL);
+		}
+	} else {
+		purple_prpl_got_user_status(sa->account, steamid, steam_personastate_to_statustype(personastate), NULL);
+	}
+
+	if (game_name && *game_name) {
+		purple_prpl_got_user_status(sa->account, steamid, "ingame", "game", game_name, NULL);
+	} else {
+		purple_prpl_got_user_status_deactive(sa->account, steamid, "ingame");
+	}
+	
+	
+	PurpleBuddy *buddy = purple_find_buddy(sa->account, steamid);
+	if (!buddy)
+		return;
+	SteamBuddy *sbuddy = buddy->proto_data;
+	if (!sbuddy)
+		return;
+	
+	g_free(sbuddy->gameextrainfo); sbuddy->gameextrainfo = game_name;
+	g_free(sbuddy->gameid); sbuddy->gameid = json_object_has_member(obj, "m_nInGameAppID") ? g_strdup(json_object_get_string_member(obj, "m_nInGameAppID")) : NULL;
+}
+
+static void
+steam_get_friend_state(SteamAccount *sa, const gchar *who)
+{
+	GString *url;
+	const gchar *accountid = steam_steamid_to_accountid(who);
+
+	g_return_if_fail(sa && who && *who);
+	
+	url = g_string_new("/chat/friendstate/");
+	g_string_append_printf(url, "%s", purple_url_encode(accountid));
+
+	steam_post_or_get(sa, STEAM_METHOD_GET | STEAM_METHOD_SSL, "steamcommunity.com", url->str, NULL, steam_got_friend_state, NULL, TRUE);
+
+	g_string_free(url, TRUE);
+}
+
 static void
 steam_request_add_user(SteamAccount *sa, JsonObject *obj, gpointer user_data)
 {
@@ -659,8 +729,15 @@ steam_poll_cb(SteamAccount *sa, JsonObject *obj, gpointer user_data)
 				steam_poll(sa, TRUE, secure_message_id);
 				sa->message = MAX(sa->message, secure_message_id);
 			} else {
-				guint new_timestamp = (guint) json_object_get_int_member(message, "timestamp");
-				time_t real_timestamp = local_timestamp - ((server_timestamp - new_timestamp) / 1000);
+				time_t real_timestamp;
+				
+				if (json_object_has_member(message, "utc_timestamp")) {
+					real_timestamp = json_object_get_int_member(message, "utc_timestamp");
+				} else {
+					guint new_timestamp = (guint) json_object_get_int_member(message, "timestamp");
+					real_timestamp = local_timestamp - ((server_timestamp - new_timestamp) / 1000);
+				}
+				
 				if (real_timestamp > sa->last_message_timestamp)
 				{
 					gchar *text, *html;
@@ -698,6 +775,8 @@ steam_poll_cb(SteamAccount *sa, JsonObject *obj, gpointer user_data)
 
 			g_string_append_c(users_to_update, ',');
 			g_string_append(users_to_update, steamid);
+			
+			steam_get_friend_state(sa, steamid);
 		} else if (g_str_equal(type, "personarelationship"))
 		{
 			const gchar *steamid = json_object_get_string_member(message, "steamid_from");
@@ -841,7 +920,10 @@ steam_got_friend_summaries(SteamAccount *sa, JsonObject *obj, gpointer user_data
 
 		// Optional :
 		g_free(sbuddy->gameid); sbuddy->gameid = json_object_has_member(player, "gameid") ? g_strdup(json_object_get_string_member(player, "gameid")) : NULL;
-		g_free(sbuddy->gameextrainfo); sbuddy->gameextrainfo = json_object_has_member(player, "gameextrainfo") ? purple_utf8_salvage(json_object_get_string_member(player, "gameextrainfo")) : NULL;
+		
+		// No longer provided here
+		//g_free(sbuddy->gameextrainfo); sbuddy->gameextrainfo = json_object_has_member(player, "gameextrainfo") ? purple_utf8_salvage(json_object_get_string_member(player, "gameextrainfo")) : NULL;
+		
 		g_free(sbuddy->gameserversteamid); sbuddy->gameserversteamid = json_object_has_member(player, "gameserversteamid") ? g_strdup(json_object_get_string_member(player, "gameserversteamid")) : NULL;
 		g_free(sbuddy->lobbysteamid); sbuddy->lobbysteamid = json_object_has_member(player, "lobbysteamid") ? g_strdup(json_object_get_string_member(player, "lobbysteamid")) : NULL;
 		g_free(sbuddy->gameserverip); sbuddy->gameserverip = json_object_has_member(player, "gameserverip") ? g_strdup(json_object_get_string_member(player, "gameserverip")) : NULL;
@@ -1068,7 +1150,7 @@ static gchar *steam_status_text(PurpleBuddy *buddy)
 
 	if (sbuddy && sbuddy->gameextrainfo)
 	{
-		if (sbuddy->gameid)
+		if (sbuddy->gameid && *(sbuddy->gameid))
 		{
 			return g_markup_printf_escaped("In game %s", sbuddy->gameextrainfo);
 		} else {
@@ -1091,7 +1173,7 @@ steam_tooltip_text(PurpleBuddy *buddy, PurpleNotifyUserInfo *user_info, gboolean
 		if (sbuddy->gameextrainfo)
 		{
 			gchar *gamename = purple_strdup_withhtml(sbuddy->gameextrainfo);
-			if (sbuddy->gameid)
+			if (sbuddy->gameid && *(sbuddy->gameid))
 			{
 				purple_notify_user_info_add_pair_html(user_info, "In game", gamename);
 			} else {
