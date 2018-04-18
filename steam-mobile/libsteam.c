@@ -770,13 +770,16 @@ steam_poll_cb(SteamAccount *sa, JsonObject *obj, gpointer user_data)
 		{
 			gint64 personastate = json_object_get_int_member(message, "persona_state");
 			const gchar *steamid = json_object_get_string_member(message, "steamid_from");
-			purple_prpl_got_user_status(sa->account, steamid, steam_personastate_to_statustype(personastate), NULL);
-			serv_got_alias(sa->pc, steamid, json_object_get_string_member(message, "persona_name"));
-
-			g_string_append_c(users_to_update, ',');
-			g_string_append(users_to_update, steamid);
 			
-			steam_get_friend_state(sa, steamid);
+			if (!STEAMID_IS_GROUP(steamid)) {
+				purple_prpl_got_user_status(sa->account, steamid, steam_personastate_to_statustype(personastate), NULL);
+				serv_got_alias(sa->pc, steamid, json_object_get_string_member(message, "persona_name"));
+
+				g_string_append_c(users_to_update, ',');
+				g_string_append(users_to_update, steamid);
+				
+				steam_get_friend_state(sa, steamid);
+			}
 		} else if (g_str_equal(type, "personarelationship"))
 		{
 			const gchar *steamid = json_object_get_string_member(message, "steamid_from");
