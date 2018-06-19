@@ -216,6 +216,21 @@ static void steam_connection_process_data(SteamConnection *steamcon)
 			g_free(tmp);
 			tmp = gunzipped;
 		}
+		
+		if (strstr(steamcon->rx_buf, "429 Too Many Requests")) {
+			g_free(steamcon->rx_buf);
+			steamcon->rx_buf = NULL;
+			g_free(tmp);
+			
+			//We got rate-limited, try again
+			SteamConnection *steamcon_dup = g_memdup(steamcon, sizeof(steamcon));
+			steamcon_dup->request = steamcon->request; steamcon->request = NULL;
+			steamcon_dup->url = steamcon->url; steamcon->url = NULL;
+			steamcon_dup->hostname = steamcon->hostname; steamcon->hostname = NULL;
+			
+			g_queue_push_head(steamcon->sa->waiting_conns, steamcon_dup);
+			return;
+		}
 	}
 
 	g_free(steamcon->rx_buf);
