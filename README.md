@@ -12,7 +12,7 @@ How to Install on Windows
 =========================
   * Download the latest dll from the [Downloads Page](https://github.com/EionRobb/pidgin-opensteamworks/releases)
   * Copy dll into your `Program Files (x86)\Pidgin\plugins` folder (or `Program Files\Pidgin\plugins` on 32-bit Windows)
-  * Extract [the icons](https://github.com/EionRobb/pidgin-opensteamworks/raw/master/steam-mobile/releases/icons.zip) into your `Program File (x86)\Pidgin\pixmaps\protocols` folder
+  * Extract [the icons](https://github.com/EionRobb/pidgin-opensteamworks/raw/master/steam-mobile/releases/icons.zip) into your `Program Files (x86)\Pidgin\pixmaps\pidgin\protocols` folder (or `Program Files\Pidgin\pixmaps\pidgin\protocols`)
 
 If this is the first time you have downloaded this plugin:
   * Download [the json-glib library](https://github.com/EionRobb/pidgin-opensteamworks/raw/master/steam-mobile/libjson-glib-1.0.dll) into your `Program Files (x86)\Pidgin` folder (or `Program Files\Pidgin`), _**NOT** into the plugins folder_
