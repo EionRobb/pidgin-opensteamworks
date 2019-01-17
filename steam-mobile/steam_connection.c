@@ -183,6 +183,17 @@ static void steam_update_cookies(SteamAccount *sa, const gchar *headers)
 	}
 }
 
+static gboolean
+steam_connection_requeue_delay(gpointer data)
+{
+	SteamConnection *steamcon = data;
+	
+	if (steamcon && steamcon->sa && steamcon->sa->waiting_conns)
+		g_queue_push_head(steamcon->sa->waiting_conns, steamcon);
+	
+	return FALSE;
+}
+
 static void steam_connection_process_data(SteamConnection *steamcon)
 {
 	gssize len;
@@ -220,15 +231,16 @@ static void steam_connection_process_data(SteamConnection *steamcon)
 		if (strstr(steamcon->rx_buf, "429 Too Many Requests")) {
 			g_free(steamcon->rx_buf);
 			steamcon->rx_buf = NULL;
+			steamcon->rx_len = 0;
 			g_free(tmp);
 			
 			//We got rate-limited, try again
 			SteamConnection *steamcon_dup = g_memdup(steamcon, sizeof(steamcon));
-			steamcon_dup->request = steamcon->request; steamcon->request = NULL;
-			steamcon_dup->url = steamcon->url; steamcon->url = NULL;
-			steamcon_dup->hostname = steamcon->hostname; steamcon->hostname = NULL;
+			steamcon->request = NULL;
+			steamcon->url = NULL;
+			steamcon->hostname = NULL;
 			
-			g_queue_push_head(steamcon->sa->waiting_conns, steamcon_dup);
+			purple_timeout_add_seconds(1, steam_connection_requeue_delay, steamcon_dup);
 			return;
 		}
 	}
