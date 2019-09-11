@@ -876,7 +876,10 @@ steam_got_friend_summaries(SteamAccount *sa, JsonObject *obj, gpointer user_data
 		const gchar *steamid = json_object_get_string_member(player, "steamid");
 		gint64 personastate = -1;
 
-		if (g_str_equal(steamid, sa->steamid) && purple_account_get_bool(sa->account, "change_status_to_game", FALSE)) {
+		if (steamid == NULL)
+			continue;
+
+		if (purple_strequal(steamid, sa->steamid) && purple_account_get_bool(sa->account, "change_status_to_game", FALSE)) {
 			const gchar *gameid = json_object_get_string_member(player, "gameid");
 			const gchar *last_gameid = purple_account_get_string(sa->account, "current_gameid", NULL);
 			if (!purple_strequal(last_gameid, gameid)) {
