@@ -235,7 +235,7 @@ static void steam_connection_process_data(SteamConnection *steamcon)
 			g_free(tmp);
 			
 			//We got rate-limited, try again
-			SteamConnection *steamcon_dup = g_memdup(steamcon, sizeof(steamcon));
+			SteamConnection *steamcon_dup = g_memdup(steamcon, sizeof(SteamConnection));
 			steamcon->request = NULL;
 			steamcon->url = NULL;
 			steamcon->hostname = NULL;
