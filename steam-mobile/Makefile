@@ -7,7 +7,7 @@ DIR_PERM	= 0755
 FILE_PERM	= 0644
 
 # Global libraries
-LIBPURPLE_CFLAGS    +=  $(shell $(PKG_CONFIG) --cflags glib-2.0 json-glib-1.0 purple gnome-keyring-1 zlib)
+LIBPURPLE_CFLAGS    +=  $(shell $(PKG_CONFIG) --cflags glib-2.0 json-glib-1.0 purple libsecret-1 zlib)
 LIBPURPLE_LIBS      +=  $(shell $(PKG_CONFIG) --libs glib-2.0 json-glib-1.0 purple zlib)
 PLUGIN_DIR_PURPLE    =  $(shell $(PKG_CONFIG) --variable=plugindir purple)
 DATA_ROOT_DIR_PURPLE =  $(shell $(PKG_CONFIG) --variable=datarootdir purple)

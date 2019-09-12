@@ -28,8 +28,10 @@ static gboolean core_is_haze = FALSE;
 #endif
 
 #ifdef G_OS_UNIX
-#include <gnome-keyring.h>
 #include <dlfcn.h>
+
+#ifdef USE_GNOME_KEYRING
+#include <gnome-keyring.h>
 
 // Copy of GNOME_KEYRING_NETWORK_PASSWORD to use locally
 static const GnomeKeyringPasswordSchema network_password_schema = {
@@ -56,6 +58,43 @@ static gnome_keyring_delete_password_type my_gnome_keyring_delete_password = NUL
 
 typedef gpointer (*gnome_keyring_find_password_type)(const GnomeKeyringPasswordSchema *schema, GnomeKeyringOperationGetStringCallback callback, gpointer data, GDestroyNotify destroy_data, ...);
 static gnome_keyring_find_password_type my_gnome_keyring_find_password = NULL;
+
+#else // USE_GNOME_KEYRING
+
+#include <libsecret/secret.h>
+// Copy of SECRET_SCHEMA_COMPAT_NETWORK to use locally
+static const SecretSchema network_schema = {
+	"org.gnome.keyring.NetworkPassword",
+	SECRET_SCHEMA_NONE,
+	{
+		{  "user", SECRET_SCHEMA_ATTRIBUTE_STRING },
+		{  "domain", SECRET_SCHEMA_ATTRIBUTE_STRING },
+		{  "object", SECRET_SCHEMA_ATTRIBUTE_STRING },
+		{  "protocol", SECRET_SCHEMA_ATTRIBUTE_STRING },
+		{  "port", SECRET_SCHEMA_ATTRIBUTE_INTEGER },
+		{  "server", SECRET_SCHEMA_ATTRIBUTE_STRING },
+		{  "authtype", SECRET_SCHEMA_ATTRIBUTE_STRING },
+		{  NULL, 0 },
+	}
+};
+static const SecretSchema *my_SSCN = &network_schema;
+
+static gpointer secret_lib = NULL;
+
+typedef gpointer (*secret_password_store_type)(const SecretSchema *schema, const gchar *collection, const gchar *label, const gchar *password, GCancellable *cancellable, GAsyncReadyCallback callback, gpointer user_data, ...);
+static secret_password_store_type my_secret_password_store = NULL;
+
+typedef gpointer (*secret_password_clear_type)(const SecretSchema *schema, GCancellable *cancellable, GAsyncReadyCallback callback, gpointer user_data, ...);
+static secret_password_clear_type my_secret_password_clear = NULL;
+
+typedef gpointer (*secret_password_lookup_type)(const SecretSchema *schema, GCancellable *cancellable, GAsyncReadyCallback callback, gpointer user_data, ...);
+static secret_password_lookup_type my_secret_password_lookup = NULL;
+
+typedef gpointer (*secret_password_lookup_finish_type)(GAsyncResult *result, GError **error);
+static secret_password_lookup_finish_type my_secret_password_lookup_finish = NULL;
+
+
+#endif // USE_GNOME_KEYRING
 #endif
 
 
@@ -76,6 +115,8 @@ steam_account_get_access_token(SteamAccount *sa) {
 }
 
 #ifdef G_OS_UNIX
+
+#ifdef USE_GNOME_KEYRING
 static void
 dummy_gnome_callback(GnomeKeyringResult result, gpointer user_data) {
 	// Gnome keyring throws toys out of cots if there's no callback!
@@ -87,6 +128,8 @@ dummy_gnome_callback(GnomeKeyringResult result, gpointer user_data) {
 		purple_debug_error("steam", "Access token not stored (%d)\n", result);
 	}
 }
+#endif //USE_GNOME_KEYRING
+
 #endif
 
 static void
@@ -97,6 +140,7 @@ steam_account_set_access_token(SteamAccount *sa, const gchar *access_token) {
 			g_free(sa->cached_access_token);
 			sa->cached_access_token = g_strdup(access_token);
 
+#ifdef USE_GNOME_KEYRING
 			my_gnome_keyring_store_password(my_GKNP, //GNOME_KEYRING_NETWORK_PASSWORD,
 											NULL,
 											_("Steam Mobile OAuth Token"),
@@ -107,10 +151,25 @@ steam_account_set_access_token(SteamAccount *sa, const gchar *access_token) {
 											"protocol",	"steammobile",
 											"domain",	"libpurple",
 											NULL);
+#else // !USE_GNOME_KEYRING
+			my_secret_password_store(my_SSCN, //SECRET_SCHEMA_COMPAT_NETWORK
+									 NULL,
+									 _("Steam Mobile OAuth Token"),
+									 access_token,
+									 NULL, NULL, NULL,
+									 "user",     sa->account->username,
+									 "server",   "api.steamcommunity.com",
+									 "protocol", "steammobile",
+									 "domain",   "libpurple",
+									 NULL);
+									 
+
+#endif //USE_GNOME_KEYRING
 		} else {
 			g_free(sa->cached_access_token);
 			sa->cached_access_token = NULL;
 
+#ifdef USE_GNOME_KEYRING
 			my_gnome_keyring_delete_password(my_GKNP, //GNOME_KEYRING_NETWORK_PASSWORD,
 											 dummy_gnome_callback, NULL, NULL,
 											 "user",		sa->account->username,
@@ -118,6 +177,15 @@ steam_account_set_access_token(SteamAccount *sa, const gchar *access_token) {
 											 "protocol",	"steammobile",
 											 "domain",		"libpurple",
 											 NULL);
+#else // !USE_GNOME_KEYRING
+			secret_password_clear(my_SSCN, //SECRET_SCHEMA_COMPAT_NETWORK
+								  NULL, NULL, NULL,
+								  "user",     sa->account->username,
+								  "server",   "api.steamcommunity.com",
+								  "protocol", "steammobile",
+								  "domain",   "libpurple",
+								  NULL);
+#endif // USE_GNOME_KEYRING
 		}
 		return;
 	}
@@ -1532,8 +1600,20 @@ steam_get_rsa_key(SteamAccount *sa)
 }
 
 #ifdef G_OS_UNIX
+
 static void
+
+#ifdef USE_GNOME_KEYRING
+
 steam_keyring_got_password(GnomeKeyringResult res, const gchar* access_token, gpointer user_data) {
+	
+#else // !USE_GNOME_KEYRING
+
+steam_keyring_got_password(GObject *source_object, GAsyncResult *res, gpointer user_data) {
+	gchar *access_token = my_secret_password_lookup_finish(res, NULL);
+	
+#endif
+	
 	SteamAccount *sa = user_data;
 
 	if (access_token && *access_token)
@@ -1545,7 +1625,13 @@ steam_keyring_got_password(GnomeKeyringResult res, const gchar* access_token, gp
 	{
 		steam_get_rsa_key(sa);
 	}
+	
+#ifndef USE_GNOME_KEYRING
+	g_free(access_token);
+#endif
 }
+
+
 #endif
 
 static void
@@ -1579,6 +1665,7 @@ steam_login(PurpleAccount *account)
 
 #ifdef G_OS_UNIX
 	if(core_is_haze) {
+#ifdef USE_GNOME_KEYRING
 		my_gnome_keyring_find_password(my_GKNP, //GNOME_KEYRING_NETWORK_PASSWORD,
 										steam_keyring_got_password, sa, NULL,
 										"user",		account->username,
@@ -1586,6 +1673,15 @@ steam_login(PurpleAccount *account)
 										"protocol",	"steammobile",
 										"domain",	"libpurple",
 										NULL);
+#else // !USE_GNOME_KEYRING
+		my_secret_password_lookup(my_SSCN, //SECRET_SCHEMA_COMPAT_NETWORK
+								  NULL, steam_keyring_got_password, sa, 
+								  "user",     account->username,
+								  "server",   "api.steamcommunity.com",
+								  "protocol", "steammobile",
+								  "domain",   "libpurple",
+								  NULL);
+#endif
 	} else
 #endif
 	if (purple_account_get_string(account, "access_token", NULL))
@@ -1825,6 +1921,7 @@ static gboolean plugin_load(PurplePlugin *plugin)
 #ifdef G_OS_UNIX
 	core_is_haze = g_str_equal(purple_core_get_ui(), "haze");
 
+#ifdef USE_GNOME_KEYRING
 	if (core_is_haze && gnome_keyring_lib == NULL) {
 		purple_debug_info("steam", "UI Core is Telepathy-Haze, attempting to load Gnome-Keyring\n");
 
@@ -1845,6 +1942,32 @@ static gboolean plugin_load(PurplePlugin *plugin)
 			return FALSE;
 		}
 	}
+	
+#else // !USE_GNOME_KEYRING
+	if (core_is_haze && secret_lib == NULL) {
+		purple_debug_info("steam", "UI Core is Telepathy-Haze, attempting to load libsecret\n");
+
+		secret_lib = dlopen("libsecret-1.so", RTLD_NOW | RTLD_GLOBAL);
+		if (!secret_lib) {
+			purple_debug_error("steam", "Could not load libsecret library.  This plugin requires libsecret when used with Telepathy-Haze\n");
+			return FALSE;
+		}
+
+		my_secret_password_store = (secret_password_store_type) dlsym(secret_lib, "secret_password_store");
+		my_secret_password_clear = (secret_password_clear_type) dlsym(secret_lib, "secret_password_clear");
+		my_secret_password_lookup = (secret_password_lookup_type) dlsym(secret_lib, "secret_password_lookup");
+		my_secret_password_lookup_finish = (secret_password_lookup_finish_type) dlsym(secret_lib, "secret_password_lookup_finish");
+
+		if (!my_secret_password_store || !my_secret_password_clear || !my_secret_password_lookup || !my_secret_password_lookup_finish) {
+			dlclose(secret_lib);
+			secret_lib = NULL;
+			purple_debug_error("steam", "Could not load libsecret functions.  This plugin requires libsecret when used with Telepathy-Haze\n");
+			return FALSE;
+		}
+	}
+
+#endif // USE_GNOME_KEYRING
+	
 #endif
 
 	return TRUE;
@@ -1853,10 +1976,21 @@ static gboolean plugin_load(PurplePlugin *plugin)
 static gboolean plugin_unload(PurplePlugin *plugin)
 {
 #ifdef G_OS_UNIX
+
+#ifdef USE_GNOME_KEYRING
 	if (gnome_keyring_lib) {
 		dlclose(gnome_keyring_lib);
 		gnome_keyring_lib = NULL;
 	}
+	
+#else // !USE_GNOME_KEYRING
+	if (secret_lib) {
+		dlclose(secret_lib);
+		secret_lib = NULL;
+	}
+	
+#endif // USE_GNOME_KEYRING
+
 #endif
 	return TRUE;
 }
