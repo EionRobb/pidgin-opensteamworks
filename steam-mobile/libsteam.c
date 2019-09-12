@@ -229,7 +229,7 @@ steam_personastate_to_statustype(gint64 state)
 static const gchar *
 steam_accountid_to_steamid(gint64 accountid)
 {
-	static gchar steamid[20];
+	static gchar steamid[21];
 
 	sprintf(steamid, "%" G_GINT64_FORMAT, accountid + G_GINT64_CONSTANT(76561197960265728));
 
@@ -239,7 +239,7 @@ steam_accountid_to_steamid(gint64 accountid)
 static const gchar *
 steam_steamid_to_accountid(const gchar *steamid)
 {
-	static gchar accountid[10];
+	static gchar accountid[21];
 	gint64 steamid_int = g_ascii_strtoll(steamid, NULL, 10);
 	
 	g_return_val_if_fail(steamid_int, NULL);
