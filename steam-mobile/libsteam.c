@@ -178,7 +178,7 @@ steam_account_set_access_token(SteamAccount *sa, const gchar *access_token) {
 											 "domain",		"libpurple",
 											 NULL);
 #else // !USE_GNOME_KEYRING
-			secret_password_clear(my_SSCN, //SECRET_SCHEMA_COMPAT_NETWORK
+			my_secret_password_clear(my_SSCN, //SECRET_SCHEMA_COMPAT_NETWORK
 								  NULL, NULL, NULL,
 								  "user",     sa->account->username,
 								  "server",   "api.steamcommunity.com",
