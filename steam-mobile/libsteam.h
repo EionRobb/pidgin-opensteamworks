@@ -91,7 +91,7 @@
 #define FB_MAX_MSG_RETRY 2
 
 #define STEAM_PLUGIN_ID "prpl-steam-mobile"
-#define STEAM_PLUGIN_VERSION "1.6.1"
+#define STEAM_PLUGIN_VERSION "1.7"
 
 #define STEAM_CAPTCHA_URL "https://steamcommunity.com/public/captcha.php?gid=%s"
 
