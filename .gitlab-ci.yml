@@ -15,7 +15,7 @@ package-debian-stretch:
     - tags
   script:
     - apt update && apt -y --no-install-recommends install gcc checkinstall libpurple-dev libglib2.0-dev libjson-glib-dev libnss3-dev libsecret-1-dev lintian
-    - cd steam-mobile/ && checkinstall --pkgname=pidgin-opensteamworks --arch=amd64 --pkglicense=GPL-3.0 --pkgsource https://github.com/EionRobb/pidgin-opensteamworks --pkgversion=${CI_COMMIT_TAG}-stretch0 --requires="libpurple0,libglib2.0-0,libjson-glib-1.0-0,libnss3,libsecret-1-0"
+    - cd steam-mobile/ && checkinstall --pkgname=pidgin-opensteamworks --arch=amd64 --pkglicense=GPL-3.0 --pkgsource https://github.com/EionRobb/pidgin-opensteamworks --pkgversion=${CI_COMMIT_TAG}-stretch0 --requires="libpurple0,libglib2.0-0,libjson-glib-1.0-0,libnss3"
     - lintian *.deb || true
     - mv *.deb ../
   artifacts:
@@ -29,7 +29,7 @@ package-debian-buster:
     - tags
   script:
     - apt update && apt -y --no-install-recommends install gcc checkinstall libpurple-dev libglib2.0-dev libjson-glib-dev libnss3-dev libsecret-1-dev lintian
-    - cd steam-mobile/ && checkinstall --pkgname=pidgin-opensteamworks --arch=amd64 --pkglicense=GPL-3.0 --pkgsource https://github.com/EionRobb/pidgin-opensteamworks --pkgversion=${CI_COMMIT_TAG}-buster0 --requires="libpurple0,libglib2.0-0,libjson-glib-1.0-0,libnss3,libsecret-1-0"
+    - cd steam-mobile/ && checkinstall --pkgname=pidgin-opensteamworks --arch=amd64 --pkglicense=GPL-3.0 --pkgsource https://github.com/EionRobb/pidgin-opensteamworks --pkgversion=${CI_COMMIT_TAG}-buster0 --requires="libpurple0,libglib2.0-0,libjson-glib-1.0-0,libnss3"
     - lintian *.deb || true
     - mv *.deb ../
   artifacts:
