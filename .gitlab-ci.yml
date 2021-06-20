@@ -1,0 +1,60 @@
+stages:
+ - package
+ - release
+ - upload
+
+variables:
+  BUSTER_PACKAGE_FILENAME: "pidgin-opensteamworks_${CI_COMMIT_TAG}-buster0-1_amd64.deb"
+  STRETCH_PACKAGE_FILENAME: "pidgin-opensteamworks_${CI_COMMIT_TAG}-buster0-1_amd64.deb"
+  PACKAGE_REGISTRY_URL: "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/pidgin-opensteamworks/${CI_COMMIT_TAG}"
+
+package-debian-stretch:
+  image: debian:stretch
+  stage: package
+  only:
+    - tags
+  script:
+    - apt update && apt -y --no-install-recommends install gcc checkinstall libpurple-dev libglib2.0-dev libjson-glib-dev libnss3-dev libsecret-1-dev lintian
+    - cd steam-mobile/ && checkinstall --pkgname=pidgin-opensteamworks --arch=amd64 --pkglicense=GPL-3.0 --pkgsource https://github.com/EionRobb/pidgin-opensteamworks --pkgversion=${CI_COMMIT_TAG}-stretch0 --requires="libpurple0,libglib2.0-0,libjson-glib-1.0-0,libnss3"
+    - lintian *.deb || true
+    - mv *.deb ../
+  artifacts:
+    paths:
+      - ./*.deb
+
+package-debian-buster:
+  image: debian:buster-backports
+  stage: package
+  only:
+    - tags
+  script:
+    - apt update && apt -y --no-install-recommends install gcc checkinstall libpurple-dev libglib2.0-dev libjson-glib-dev libnss3-dev libsecret-1-dev lintian
+    - cd steam-mobile/ && checkinstall --pkgname=pidgin-opensteamworks --arch=amd64 --pkglicense=GPL-3.0 --pkgsource https://github.com/EionRobb/pidgin-opensteamworks --pkgversion=${CI_COMMIT_TAG}-buster0 --requires="libpurple0,libglib2.0-0,libjson-glib-1.0-0,libnss3"
+    - lintian *.deb || true
+    - mv *.deb ../
+  artifacts:
+    paths:
+      - ./*.deb
+
+publish-release:
+  script: echo "publising release $CI_COMMIT_TAG"
+  image: registry.gitlab.com/gitlab-org/release-cli:latest
+  stage: release
+  release:
+    name: "$CI_COMMIT_TAG"
+    tag_name: "$CI_COMMIT_TAG"
+    ref: "$CI_COMMIT_TAG"
+    description: "Version $CI_COMMIT_TAG\n\nPackages for Debian 10/11 can be found in the [package registry](https://gitlab.com/nodiscc/pidgin-opensteamworks/-/packages?type=&sort=desc&orderBy=version&search[]=)"
+  only:
+    - tags
+
+upload_packages:
+  stage: upload
+  image: curlimages/curl:latest
+  only:
+    - tags
+  script:
+    - |
+      curl --fail -v --header "JOB-TOKEN: ${CI_JOB_TOKEN}" --upload-file ${STRETCH_PACKAGE_FILENAME} ${PACKAGE_REGISTRY_URL}/${STRETCH_PACKAGE_FILENAME}
+    - |
+      curl --fail -v --header "JOB-TOKEN: ${CI_JOB_TOKEN}" --upload-file ${BUSTER_PACKAGE_FILENAME} ${PACKAGE_REGISTRY_URL}/${BUSTER_PACKAGE_FILENAME}

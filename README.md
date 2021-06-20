@@ -22,6 +22,7 @@ How to install on Linux
   * Download the latest .so file from the [Downloads Page](https://github.com/EionRobb/pidgin-opensteamworks/releases)
   * Copy the file to ```~/.purple/plugins```
 
+
 How to install on Fedora
 =====================
 On Fedora you can install [package](https://apps.fedoraproject.org/packages/purple-libsteam) from Fedora's main repository:
@@ -38,6 +39,12 @@ On CentOS/RHEL you can install [package](https://apps.fedoraproject.org/packages
   sudo yum install purple-libsteam pidgin-libsteam
 ```
 
+How to install on Ubuntu/Debian
+=====================
+
+Debian packages for Debian 10/11 can be found in the [package registry](https://gitlab.com/nodiscc/pidgin-opensteamworks/-/packages?type=&sort=desc&orderBy=version&search[]=)
+
+
 How to Build RPM package for Fedora/openSUSE/CentOS/RHEL
 =====================
   ```
@@ -48,23 +55,33 @@ How to Build RPM package for Fedora/openSUSE/CentOS/RHEL
   rpmbuild -ba ~/rpmbuild/SPECS/purple-libsteam.spec
   ```
 
-How to Build on Ubuntu
+How to install on Ubuntu/Debian
 =====================
-  * Download the latest tarball from the [Downloads Page](https://github.com/EionRobb/pidgin-opensteamworks/releases)
-  * Make sure you have the development packages/headers for libpurple, glib-2.0, libjson-glib, gnome-keyring, nss
-  * sudo apt-get install libpurple-dev libglib2.0-dev libjson-glib-dev libgnome-keyring-dev libnss3-dev
-  * Run `cd steam-mobile && make && sudo make install`
-  * sudo cp libsteam.so /usr/lib/purple-2/
-
+  * Download the [latest tarball](https://github.com/EionRobb/pidgin-opensteamworks/releases) or `git clone` the repository
+  * Install development packages/headers: `sudo apt install libpurple-dev libglib2.0-dev libjson-glib-dev libnss3-dev libsecret-1-dev`
+  * Build and install the plugin `cd steam-mobile && make && sudo make install`
+  * To build a .deb package: `sudo apt install checkinstall && cd steam-mobile && sudo checkinstall --pkgname=pidgin-opensteamworks --arch=amd64 --pkglicense=GPL-3.0 --pkgsource https://github.com/EionRobb/pidgin-opensteamworks --pkgversion=1.7 --requires="libpurple0,libglib2.0-0,libjson-glib-1.0-0,libgnome-keyring0,libnss3,libsecret-1-0"`
 
 How to Build on Linux
 =====================
-  * Download the latest tarball from the [Downloads Page](https://github.com/EionRobb/pidgin-opensteamworks/releases)
-  * Make sure you have the development packages/headers for libpurple, glib-2.0, libjson-glib, gnome-keyring, nss
+  * Download the [latest tarball](https://github.com/EionRobb/pidgin-opensteamworks/releases) or `git clone` the repository
+  * Make sure you have the development packages/headers for libpurple, glib-2.0, libjson-glib, gnome-keyring, nss, libsecret
   * Run `cd steam-mobile && make && sudo make install`
 
 Changelog
-=========
+========= 
+  * v1.7.1: Add automatic .deb package builds for Debian 9 Stretch and 10 Buster
+  * v1.7:  Add an option to appear as a 'web' user instead of 'mobile' user
+  * v1.7:  Fix to show the name of people who are requesting to add you to their friends list
+  * v1.7:  Add the option to redeem game keys to the account menu
+  * v1.7:  Fixes for displaying the in-game game name
+  * v1.7:  Improvements to steam guard and captcha handling
+  * v1.7:  Ignore invites from groups/clans
+  * v1.7:  Fixes for handling rate-limiting from the server
+  * v1.7:  Fixes a bunch of crashes
+  * v1.7:  Add libgcrypt, mbedtls, openssl as optional crypto backends
+  * v1.7:  Bitlbee and Adium compatibility improvements
+  * v1.7:  Switch to use libsecret instead of gnome-keyring for Telepathy-Haze users
   * v1.6.1 - Fix for repeated offline history
   * v1.6 - Fixes logins and crashes for UTF8 characters in game names, downloads offline history
   * v1.5.1 - Fixes the infinite captcha login loop
