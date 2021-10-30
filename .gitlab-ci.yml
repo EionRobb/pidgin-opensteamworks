@@ -5,7 +5,7 @@ stages:
 
 variables:
   BUSTER_PACKAGE_FILENAME: "pidgin-opensteamworks_${CI_COMMIT_TAG}-buster0-1_amd64.deb"
-  STRETCH_PACKAGE_FILENAME: "pidgin-opensteamworks_${CI_COMMIT_TAG}-buster0-1_amd64.deb"
+  STRETCH_PACKAGE_FILENAME: "pidgin-opensteamworks_${CI_COMMIT_TAG}-stretch0-1_amd64.deb"
   PACKAGE_REGISTRY_URL: "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/pidgin-opensteamworks/${CI_COMMIT_TAG}"
 
 package-debian-stretch:
